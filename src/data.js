@@ -12,7 +12,7 @@ export const defaultPeriod=(mode='Monthly')=>({mode,date:today,month:today.slice
 
 export const branches=['All branches','Guimba','Baloc','Talavera','Cabanatuan','Palayan','Laur','Paniqui','Rizal','Talugtug','Gapan','Muñoz']
 export const branchMaster=[
-{name:'Guimba',address:'31 Lacson Bldg, Parano Street, Cor. Saranay District, Guimba, Nueva Ecija',contact:'0946 946 1531',hours:'Daily 7AM–5PM',accreditation:'Accredited',night:true},
+{name:'Guimba',address:'JB Lacson Bldg, Parairo Street, Cor. Saranay District, Guimba, Nueva Ecija',contact:'0946 945 1531',hours:'Daily 7AM–11PM',accreditation:'Accredited',night:true,main:true},
 {name:'Baloc',address:'HLD Bldg, Purok 3, Baloc, Sto. Domingo, Nueva Ecija',contact:'0953 665 5592',hours:'Daily 8AM–5PM',accreditation:'Not accredited',night:false},
 {name:'Talavera',address:'Maharlika Highway, Brgy. Maestrang Kikay, Talavera, Nueva Ecija',contact:'0955 760 7872',hours:'Daily 8AM–5PM',accreditation:'Accredited',night:false},
 {name:'Cabanatuan',address:'Stall No. 20, Mabini Arcade, Mabini St., Quezon District, Cabanatuan City, Nueva Ecija',contact:'0952 528 2411',hours:'Daily 7AM–11PM',accreditation:'Accredited',night:true},
