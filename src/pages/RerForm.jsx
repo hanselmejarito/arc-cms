@@ -1,5 +1,5 @@
 import React from 'react'
-import { ageFrom, branchMaster, caseInfo, protocolOf } from '../data'
+import { ageFrom, branchMaster, caseInfo } from '../data'
 import { BrandLogo } from '../components'
 import bodyMap from '../assets/arc-male-body-map.jpg'
 
@@ -24,24 +24,24 @@ const paperDays=[
 function DoseBlock({row,g}){
  const two=/2 sites/i.test(g?.dose||''),one=/1 site/i.test(g?.dose||''),im=/IM/i.test(g?.dose||'')
  const alive=g?.animalStatus==='Alive',lost=g?.animalStatus==='Lost/Stray',dead=g?.animalStatus==='Dead'
- const next=g?.advised?g.advised.replace(/^Advised to come back:\s*/i,''):row.next
+ const next=row.next?(g?.advised?g.advised.replace(/^Advised to come back:\s*/i,'').replace(/\s*·\s*.*$/,''):row.next):''
  return <div className="arc-dose">
   <div className="arc-dose-meta">
    <span className="arc-dose-label">Date/Time</span>
    <b className="arc-dose-date">{g?slash(g.date).replaceAll(' ',''):'__/__/26'}</b>
    <small className="arc-dose-time">{g?.time||'__:__'}</small>
-   <span>Vaccinator</span>
-   <em>{g?.vaccinator||'__________'}</em>
+   <span className="arc-dose-label arc-vaccinator-label">Vaccinator</span>
+   <em className="arc-vaccinator-name">{g?.vaccinator||'__________'}</em>
   </div>
   <div className="arc-dose-body">
-   <div className="arc-dose-heading"><strong>{row.title}</strong><div className="arc-lr"><span>L / R</span><Box on={g?.side==='L'}/> L <Box on={g?.side==='R'}/> R</div></div>
+   <div className="arc-dose-heading"><strong>{row.title}</strong><strong>L / R</strong></div>
    <label className="arc-dose-given"><Box on={!!g}/> {row.given}</label>
    <div className={'arc-dose-options'+(row.idOpts?'':' im-only')}>
     {row.idOpts&&<label><Box on={two}/> 0.1 ml x 2 sites ID</label>}
     <label className="arc-im-option"><Box on={im}/> 1 vial IM</label>
     {row.idOpts&&<label><Box on={one}/> 0.1 ml x 1 site ID</label>}
    </div>
-   {next&&<label className="arc-dose-advice"><Box on={!!g?.advised}/> Advised to come back for {next}</label>}
+   {row.next&&<label className="arc-dose-advice"><Box on={!!g&&!!next}/> Advised to come back for {next}</label>}
    <div className="arc-animal-status"><label><Box on={alive}/> ALIVE</label><label><Box on={lost}/> LOST/STRAY</label><label><Box on={dead}/> DEAD</label></div>
   </div>
  </div>
@@ -56,6 +56,12 @@ export function printRer(){
  window.setTimeout(()=>window.print(),40)
 }
 
+function paperPlace(br){
+ if(!br||br.name==='Guimba')return 'SARANAY DISTRICT, GUIMBA, NUEVA ECIJA'
+ const tail=(br.address||'').split(',').map(s=>s.trim()).filter(Boolean).slice(-2).join(', ')
+ return (tail||br.name+', Nueva Ecija').toUpperCase()
+}
+
 export function RerSheet({e,p,doses}){
  const info=caseInfo(e,doses)
  const br=branchMaster.find(b=>b.name===e.branch)||branchMaster[0]
@@ -64,11 +70,11 @@ export function RerSheet({e,p,doses}){
  const brand=(er.brand||'').toLowerCase()
  return <div className="rer-sheet arc-form">
   <header className="arc-form-head">
-   <span className="arc-form-logo"><BrandLogo alt="ARC"/></span>
+   <span className="arc-form-logo"><BrandLogo alt="ARC Anti Rabies Clinic"/></span>
    <div className="arc-form-title">
     <h1>ARC ANIMAL BITE CENTER</h1>
-    <p>{br.address||'Saranay District, Guimba, Nueva Ecija'}</p>
-    <small>Mobile No: {br.contact||'0946 945 1531'} / EMAIL ADDRESS arcantirabiesclinic@gmail.com</small>
+    <p>{paperPlace(br)}</p>
+    <small>Mobile No: {(br.contact||'09469451531').replace(/\s/g,'')} / EMAIL ADDRESS arcantirabisclinic@gmail.com</small>
    </div>
    <span className="arc-form-head-spacer" aria-hidden="true"/>
   </header>
@@ -89,17 +95,17 @@ export function RerSheet({e,p,doses}){
      <h3>VACCINE:</h3>
      <label><Box on={e.vaccine==='PCEC'}/> PCEC</label>
      <label><Box on={e.vaccine==='PVRV'}/> PVRV</label>
-     <div className="arc-lr stacked"><Box on={e.side==='L'}/> L <Box on={e.side==='R'}/> R</div>
     </div>
     <div className="arc-block">
      <h3>CATEGORY:</h3>
      {['I','II','III'].map(c=><label key={c}><Box on={e.category===c}/> {c}</label>)}
     </div>
-    <label className="arc-block tight"><Box on={!!e.booster}/> BOOSTER:</label>
-    <label className="arc-block tight"><Box on={!!e.preExp}/> PRE-EXP:</label>
+    <label className="arc-block tight"><span>BOOSTER:</span><Box on={!!e.booster}/></label>
+    <label className="arc-block tight"><span>PRE-EXP:</span><Box on={!!e.preExp}/></label>
    </div>
    <div className="arc-center">
     <h3>Chief Complaints</h3>
+    <div className="arc-complaint-side"><span><Box on={e.side==='L'}/> L</span><span><Box on={e.side==='R'}/> R</span></div>
     <div className="arc-bodies">
      <svg viewBox="0 0 460 360" aria-label="Bite site">
       <image href={bodyMap} x="0" y="0" width="460" height="345" preserveAspectRatio="xMidYMid meet"/>
@@ -111,14 +117,14 @@ export function RerSheet({e,p,doses}){
    <div className="arc-right">
     <div className="arc-row"><b>Bitting Animal:</b> <Box on={e.animal==='Dog'}/> Dog <Box on={e.animal==='Cat'}/> Cat <Box on={e.animal==='Others'}/> Oth: <u className="arc-animal-other">{e.animal==='Others'?e.animalOther:''}</u></div>
     <div className="arc-row"><b>Type of Bite:</b> <Box on={e.biteType==='Bite'}/> Bite <Box on={e.biteType==='Non-Bite'}/> Non-Bite</div>
-    <div className="arc-row">Pet: <YN v={e.pet}/> Vaccinated: <YN v={e.vaccinated}/> Stray: <YN v={e.stray}/></div>
-    <div className="arc-row">Owned: <YN v={e.owned}/> If not, whom: <u className="arc-owner-line">{e.owned?'':(e.owner||'')}</u></div>
-    <div className="arc-row"><span className="arc-gold-label">Date of bite:</span> <u>{slash(e.biteDate)}</u> Time: <u>{e.biteTime||''}</u></div>
-    <div className="arc-row"><span className="arc-gold-label">SOB:</span> <Box on={e.side==='L'}/> L <Box on={e.side==='R'}/> R &nbsp; POB: <u>{e.place||''}</u></div>
-    <div className="arc-row">Washing of Wound: <YN v={e.washed}/> Tandok: <YN v={e.tandok}/></div>
-    <div className="arc-row"><b>TYPE OF WOUND:</b></div>
+    <div className="arc-row arc-indent">Pet: <YN v={e.pet}/> Vaccinated: <YN v={e.vaccinated}/> Stray: <YN v={e.stray}/></div>
+    <div className="arc-row arc-indent">Owned: <YN v={e.owned}/> If not, whom: <u className="arc-owner-line">{e.owned?'':(e.owner||'')}</u></div>
+    <div className="arc-row arc-indent"><span className="arc-gold-label">Date of bite:</span> <u>{slash(e.biteDate)}</u> Time: <u>{e.biteTime||''}</u></div>
+    <div className="arc-row arc-indent"><span className="arc-gold-label">SOB:</span> <Box on={e.side==='L'}/> L <Box on={e.side==='R'}/> R &nbsp; POB: <u>{e.place||''}</u></div>
+    <div className="arc-row"><b>Washing of Wound:</b> <YN v={e.washed}/> Tandok: <YN v={e.tandok}/></div>
+    <div className="arc-row arc-section-gap"><b>TYPE OF WOUND:</b></div>
     <div className="arc-row wrap">{['Abrasion','Lacerated','Bruised','Healed'].map(w=><label key={w}><Box on={(e.wound||[]).includes(w)}/> {w}</label>)}</div>
-    <div className="arc-row"><b className="arc-medical-heading">MEDICAL HISTORY:</b></div>
+    <div className="arc-row arc-section-gap"><b className="arc-medical-heading">MEDICAL HISTORY:</b></div>
     <div className="arc-row wrap">
      <span>IDDM: <YN v={h.iddm}/></span>
      <span>Kidney Disease: <YN v={h.kidney}/></span>
@@ -138,32 +144,45 @@ export function RerSheet({e,p,doses}){
    <div className="arc-side">
     <div className="arc-panel">
      <h3>CONSENT FORM</h3>
-     <p className="arc-sign-label">SIGNATURE OVER PRINTED NAME</p>
-     <div className="arc-sign-line">{e.consent?e.consentBy:''}</div>
+     <div className="arc-indent arc-consent-block">
+      <div className="arc-sign-name">{e.consent?e.consentBy:''}</div>
+      <div className="arc-sign-rule" aria-hidden="true"/>
+      <p className="arc-sign-label">SIGNATURE OVER PRINTED NAME</p>
+     </div>
     </div>
     <div className="arc-panel">
      <h3>TETANUS TOXOID:</h3>
-     <p>Date: <u>{slash(tt.date)}</u> Time: <u>{tt.time||''}</u></p>
-     <p>Refused: <Box on={!!tt.refused}/> With Previous <Box on={!!tt.withPrevious}/></p>
+     <div className="arc-indent">
+      <p>Date: <u>{slash(tt.date)}</u> Time: <u>{tt.time||''}</u></p>
+      <p>Refused: <Box on={!!tt.refused}/> With Previous <Box on={!!tt.withPrevious}/></p>
+     </div>
     </div>
     <div className="arc-panel">
-     <h3>ERIG: <span className="arc-erig-options"><Box on={brand.includes('equirab')}/> EQUIRAB <Box on={brand.includes('vinrab')}/> VINRAB</span></h3>
-     <p>Date: <u>{slash(er.date)}</u></p>
-     <p>Time of Skin Test: <u>{er.skinTime||''}</u></p>
-     <p>Result of ST: <u>{er.skinResult||''}</u> Weight: <u>{er.weight||''}</u></p>
-     <p>Infiltration: <YN v={er.infiltration}/> ML used: <u>{er.ml||''}</u> ml</p>
-     <p>Refused: <Box on={!!er.refused}/></p>
+     <h3>ERIG: <span className="arc-erig-options"><Box on={brand.includes('equirab')}/> EQUIRAB <Box on={brand.includes('vinrab')}/> VINRAB{brand.includes('hrig')&&<u> HRIG</u>}</span></h3>
+     <div className="arc-indent">
+      <p>Date: <u>{slash(er.date)}</u></p>
+      <p>Time of Skin Test: <u>{er.skinTime||''}</u></p>
+      <p>Result of ST: <u>{er.skinResult||''}</u> Weight: <u>{er.weight||''}</u></p>
+      <p>Infiltration: <YN v={er.infiltration}/> ML used: <u>{er.ml||''}</u> ml</p>
+      <p>Refused: <Box on={!!er.refused}/></p>
+     </div>
     </div>
     <div className="arc-panel">
      <h3>PROGRESS NOTE:</h3>
-     <div className="arc-progress-fields">
-      <div className="arc-progress-checks">
-       <label><Box on={!!pr.healthy}/> Patient is Healthy:</label>
-       <label><Box on={!!pr.healed}/> Wound is healed</label>
+     <div className="arc-indent">
+      <div className="arc-progress-fields">
+       <div className="arc-progress-checks">
+        <label><Box on={!!pr.healthy}/> Patient is Healthy:</label>
+        <label><Box on={!!pr.healed}/> Wound is healed</label>
+       </div>
+       <p className="arc-progress-others"><span>Others(please specify):</span><u>{pr.others||''}</u></p>
       </div>
-      <p className="arc-progress-others"><span>Others(please specify):</span><u>{pr.others||''}</u></p>
      </div>
-     <p className="arc-doc"><span className="arc-doc-label">Doctor’s Signature:</span><span className="arc-doc-signature"><span className="arc-doc-sign-line" aria-hidden="true"/><b>{e.doctor||''}</b></span></p>
+     <div className="arc-doc">
+      <div className="arc-sign-name">{e.doctor||''}</div>
+      <div className="arc-sign-rule" aria-hidden="true"/>
+      <p className="arc-sign-label">Doctor’s Signature</p>
+     </div>
     </div>
    </div>
   </div>
@@ -173,7 +192,6 @@ export function RerSheet({e,p,doses}){
    <label><Box on={st==='Complete'}/> Complete</label>
    <label><Box on={st==='Incomplete'}/> Incomplete</label>
    <label><Box on={st==='Transferred'}/> Transferred</label>
-   {protocolOf(e).days.some(([d])=>!paperDays.some(r=>r.day===d)&&info.given.some(g=>g.day===d))&&<small>Extra protocol doses are on the treatment record.</small>}
   </div>
  </div>
 }

@@ -41,7 +41,7 @@
 .sat-c{animation:hero-float 4.6s ease-in-out 1.3s infinite}
 @media(prefers-reduced-motion:reduce){.ring-a,.ring-b,.hero-center,.sat-a,.sat-b,.sat-c{animation:none}}
 
-.choice-field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}.choice-field>span{font-size:12px;color:#5a7677;font-weight:800}.choice-group{display:inline-flex;flex-wrap:wrap;gap:5px}.choice-group button{border:1px solid #dfe8e8;background:#fff;color:#587677;border-radius:7px;min-height:32px;padding:0 11px;font-size:12px;font-weight:800}.choice-group button:hover{border-color:#ffe082}.choice-group button.active{background:var(--arc-yellow-light);border-color:var(--arc-yellow);color:var(--arc-ink)}.choice-row{display:flex;flex-wrap:wrap;gap:8px 22px;align-items:flex-start}.choice-row.wrap{gap:4px 16px}.check-grid.four{grid-template-columns:repeat(4,minmax(0,1fr))}.form-grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}.segmented.fit{display:inline-flex;margin-bottom:6px}.picker-card{margin-bottom:15px}.picker-row{display:flex;gap:18px;align-items:center;flex-wrap:wrap}.encounter-picker{min-width:280px;flex:0 1 340px}.encounter-picker .field{margin:0}.picker-summary{display:flex;flex-wrap:wrap;gap:8px 24px;flex:1}.picker-summary small{display:block;color:#9aacac;font-size:11px;letter-spacing:.06em;font-weight:800}.picker-summary strong{display:block;font-size:13px;color:#365b5c;margin-top:3px}.soap-block{display:flex;gap:12px;border-top:1px solid #edf1f1;padding-top:14px;margin-top:4px}.soap-block>span{width:28px;height:28px;background:var(--arc-yellow-light);color:var(--arc-ink);border-radius:7px;display:grid;place-items:center;font-weight:800;font-size:15px;flex:none}.soap-block>div{flex:1;min-width:0}.dose-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}.dose-card{border:1px solid #e5ecec;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:6px;background:#fcfdfd}.dose-card.done{border-color:#bbe5c9;background:#f3fbf5}.dose-card-head strong{display:block;font-size:14px}.dose-card-head small{font-size:11px;color:#8aa0a0}.dose-card p{margin:0;font-size:12px;color:#617d7d;line-height:1.5}.dose-card .button{align-self:flex-start}.block-sub{display:block;font-size:11px;color:#a4b2b2;margin-top:2px}.shift-tag{font-size:11px;font-weight:800;color:var(--arc-red)}.shift-tag.NS{color:var(--arc-blue)}.toolbar.tight{margin:0}.negative{color:#a66f6a}.period-filter{display:flex;gap:10px;align-items:end;flex-wrap:wrap}.period-filter label{display:block;font-size:11px;font-weight:800;color:#9badad;letter-spacing:.1em;margin-bottom:5px}
+.choice-field{display:flex;flex-direction:column;gap:5px;margin-bottom:12px}.choice-field>span{font-size:12px;color:#5a7677;font-weight:800}.choice-group{display:inline-flex;flex-wrap:wrap;gap:5px}.choice-group button{border:1px solid #dfe8e8;background:#fff;color:#587677;border-radius:7px;min-height:32px;padding:0 11px;font-size:12px;font-weight:800}.choice-group button:hover{border-color:#ffe082}.choice-group button.active{background:var(--arc-yellow-light);border-color:var(--arc-yellow);color:var(--arc-ink)}.choice-row{display:flex;flex-wrap:wrap;gap:8px 22px;align-items:flex-start}.choice-row.wrap{gap:4px 16px}.check-grid.four{grid-template-columns:repeat(4,minmax(0,1fr))}.form-grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}.segmented.fit{display:inline-flex;margin-bottom:6px}.picker-card{margin-bottom:15px}.picker-row{display:flex;gap:18px;align-items:center;flex-wrap:wrap}.encounter-picker{min-width:280px;flex:0 1 340px}.encounter-picker .field{margin:0}.picker-summary{display:flex;flex-wrap:wrap;gap:8px 24px;flex:1}.picker-summary>div.wide{flex:1 1 100%}.picker-summary small{display:block;color:#9aacac;font-size:11px;letter-spacing:.06em;font-weight:800}.picker-summary strong{display:block;font-size:13px;color:#365b5c;margin-top:3px}.soap-block{display:flex;gap:12px;border-top:1px solid #edf1f1;padding-top:14px;margin-top:4px}.soap-block>span{width:28px;height:28px;background:var(--arc-yellow-light);color:var(--arc-ink);border-radius:7px;display:grid;place-items:center;font-weight:800;font-size:15px;flex:none}.soap-block>div{flex:1;min-width:0}.dose-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px}.dose-card{border:1px solid #e5ecec;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:6px;background:#fcfdfd}.dose-card.done{border-color:#bbe5c9;background:#f3fbf5}.dose-card-head strong{display:block;font-size:14px}.dose-card-head small{font-size:11px;color:#8aa0a0}.dose-card p{margin:0;font-size:12px;color:#617d7d;line-height:1.5}.dose-card .button{align-self:flex-start}.block-sub{display:block;font-size:11px;color:#a4b2b2;margin-top:2px}.shift-tag{font-size:11px;font-weight:800;color:var(--arc-red)}.shift-tag.NS{color:var(--arc-blue)}.toolbar.tight{margin:0}.negative{color:#a66f6a}.period-filter{display:flex;gap:10px;align-items:end;flex-wrap:wrap}.period-filter label{display:block;font-size:11px;font-weight:800;color:#9badad;letter-spacing:.1em;margin-bottom:5px}
 .form-sheet .sheet-head{text-align:center;margin-bottom:14px;display:flex;flex-direction:column;gap:2px}.sheet-head strong{font-size:15px;color:var(--arc-ink)}.sheet-head span{font-size:12px;color:#6a8585}.sheet-head h3{font-size:15px;margin:6px 0 2px;letter-spacing:.02em}.sheet-head small{font-size:12px;color:#6a8585}.sheet-reminder{font-size:12px;color:#6a8585;line-height:1.5;margin:0 0 12px}.sheet-legend{margin-top:12px;font-size:11px;color:#7a9292;line-height:1.6}.sheet-legend p{margin:0 0 3px}.form-table{border-collapse:collapse;width:100%;font-size:12px}.form-table th,.form-table td{border:1px solid #cfdcdc;padding:6px 7px;text-align:center;letter-spacing:0;white-space:normal}.form-table th{background:#f3f7f7;color:#3e5a5a;font-size:11px;font-weight:800;line-height:1.3}.form-table td{color:#35585a;white-space:nowrap}.form-table td.left{text-align:left}.form-table td.num{text-align:right}.form-table td.auto{background:#e8f5df}.form-table tfoot td{font-weight:800;background:#f3f7f7}.form-table.compact{margin:14px 0}.form-table.registry th{min-width:46px}.form-table.doh th{min-width:58px}.form-table .sticky{position:sticky;left:0;z-index:1;background:#fff;min-width:130px}.form-table th.sticky,.form-table tfoot .sticky{background:#f3f7f7}.cell-input{width:56px;border:1px solid #dfe8e8;border-radius:4px;padding:3px 5px;font-size:12px;text-align:right}.doh-checks{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}.doh-checks span{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;border-radius:20px;padding:5px 10px}.doh-checks .ok{background:#dcfce7;color:#15803d}.doh-checks .bad{background:#fdecea;color:var(--arc-red)}
 .rer-sheet{border:1px solid #dfe8e8;border-radius:10px;padding:20px;background:#fff}.rer-head{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid var(--arc-yellow);padding-bottom:12px;margin-bottom:14px}.rer-head strong{display:block;font-size:15px;color:var(--arc-ink)}.rer-head span{font-size:12px;color:#6a8585}.rer-head small{display:block;font-size:11px;color:#9aacac;letter-spacing:.08em;font-weight:800;text-align:right}.rer-head b{font-size:16px;color:var(--arc-red)}.rer-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:14px}.rer-grid .wide{grid-column:span 2}.rer-grid small{display:block;font-size:11px;color:#9aacac;text-transform:uppercase;letter-spacing:.04em}.rer-grid b{display:block;font-size:13px;color:#365b5c;margin-top:3px}.rer-cols{display:grid;grid-template-columns:1fr 1fr;gap:20px}.rer-cols h4{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:#9a6700;margin:10px 0 4px}.rer-cols p{font-size:12px;color:#587274;line-height:1.6;margin:0 0 4px}.rer-foot{display:flex;flex-wrap:wrap;gap:8px 24px;border-top:1px solid #edf1f1;padding-top:12px;margin-top:12px;font-size:12px;color:#587274}
 @media(max-width:1300px){.content{padding:24px}.dashboard-lower{grid-template-columns:1fr 1fr}.dashboard-lower>.card:last-child{grid-column:1/-1}.stat-grid.four{grid-template-columns:repeat(2,1fr)}.branch-card-grid{grid-template-columns:repeat(3,1fr)}}@media(max-width:1050px){.global-search{display:none}.dashboard-grid{grid-template-columns:repeat(2,1fr)}.dashboard-grid>.card.chart-wide{grid-column:span 2}.inventory-layout,.form-layout,.payroll-layout{grid-template-columns:1fr}.form-aside{display:grid;grid-template-columns:1fr 1fr}.rules-card{grid-column:1}.branch-card-grid{grid-template-columns:repeat(2,1fr)}.sidebar{width:225px;flex-basis:225px}.nav-link{font-size:13px;padding:9px 10px}.brand{padding:0 16px}.brand .brand-mark,.brand .brand-partner{width:44px;height:44px}.brand small{white-space:normal}}@media(max-width:760px){.sidebar{position:fixed;left:-275px;width:264px;height:100vh;transition:left .2s}.sidebar.mobile-open{left:0}.sidebar-collapsed .sidebar{width:264px;flex-basis:264px}.sidebar-collapsed .brand>div:not(.brand-mark),.sidebar-collapsed .sidebar-context,.sidebar-collapsed .nav-label,.sidebar-collapsed .nav-link span,.sidebar-collapsed .sidebar-bottom{display:block}.sidebar-collapsed .nav-link{justify-content:flex-start;padding:9px 14px}.sidebar-close{display:block;margin-left:auto;border:0;background:none;color:#728d8c}.mobile-scrim{display:block;position:fixed;inset:0;background:#0c252576;z-index:19}.mobile-menu{display:grid;place-items:center;border:0;background:none;color:#527373;margin-right:7px}.header-logo,.header-partner,.sidebar-collapsed .brand .brand-partner{display:block}.sidebar-context,.sidebar-collapsed .sidebar-context{display:flex;cursor:pointer}.sidebar-context select,.sidebar-context>svg{display:block}.sidebar-context:hover{border-color:#ffe082;background:#fffbeb}.sidebar-context:focus-within{border-color:var(--arc-yellow);box-shadow:0 0 0 3px rgb(255 204 0 / 20%)}.sidebar-context.locked,.sidebar-context.locked select{cursor:default}.sidebar-context.locked:hover{border-color:#e7eeee;background:#f7fafa}.sidebar-context.locked>svg{display:none}.sidebar-collapsed .brand .brand-mark{width:50px;height:50px}.login-brand .brand-mark,.login-brand .brand-partner{width:60px;height:60px}.topbar{height:61px;padding:0 17px}.top-right{gap:7px}.branch-select{display:none}.avatar-text,.avatar-button>svg{display:none}.content{padding:18px}.section-title{align-items:start;flex-direction:column}.section-actions{width:100%;flex-wrap:wrap}.hero-banner{padding:22px}.hero-visual{opacity:.35;right:-105px}.stat-grid,.stat-grid.four{grid-template-columns:repeat(2,1fr)}.dashboard-grid,.dashboard-lower,.split-overview,.profile-grid,.doh-grid,.settings-grid{grid-template-columns:1fr}.dashboard-grid>.card,.dashboard-grid>.card.chart-wide,.dashboard-lower>.card:last-child{grid-column:auto}.profile-grid .full,.settings-grid .full{grid-column:auto}.profile-hero{flex-wrap:wrap}.profile-actions{margin-left:0;width:100%;flex-wrap:wrap}.summary-strip{grid-template-columns:repeat(2,1fr);gap:12px}.summary-strip>div{border:0;justify-content:start}.referral-flow{gap:10px}.referral-flow>div{min-width:0;flex:1}.referral-flow>div>span{display:none}.referral-flow strong{font-size:12px}.referral-flow small{font-size:10px}.branch-card-grid{grid-template-columns:1fr 1fr}.login-page{grid-template-columns:1fr}.login-left{min-height:320px;padding:25px}.login-copy{margin-top:30px}.login-copy h1{font-size:32px}.login-copyright{display:none}.login-right{padding:45px 25px}.form-aside{grid-template-columns:1fr}.payroll-header{grid-template-columns:1fr}.reports-filter{flex-wrap:wrap}.reports-filter .filter-context{margin-left:0}.attendance-hero{flex-wrap:wrap}.shift-clock{width:100%}.payslip-info{grid-template-columns:1fr 1fr}.payslip-columns{gap:12px}.payslip-sheet{padding:22px}.export-actions{flex-wrap:wrap}}@media(max-width:480px){.stat-grid,.stat-grid.four,.branch-card-grid,.form-grid,.check-grid{grid-template-columns:1fr}.hero-banner h2{font-size:21px}.donut-layout{flex-wrap:wrap}.donut{margin:auto}.profile-hero{padding:17px}.section-title h1{font-size:23px}.modal-body{padding:14px}.payslip-columns{grid-template-columns:1fr}.payslip-select{display:block}.payslip-select>span{display:block;margin-top:10px}.toast{left:15px;right:15px;max-width:none}}@media print{.sidebar,.topbar,.app-footer,.section-title .button,.export-actions,.notice-line,.tabs,.toolbar,.toast,.button,.payslip-select{display:none!important}.content{padding:0}.main-shell{width:100%}.payslip-sheet{border:0;box-shadow:none;max-width:none}.card{box-shadow:none;break-inside:avoid}}
@@ -77,14 +77,15 @@ html,body{background:#fff!important}
 .form-table{font-size:8px}
 html.print-rer,html.print-rer body{height:auto!important;overflow:visible!important;background:#fff!important}
 html.print-rer .app,html.print-rer .main-shell,html.print-rer .content,html.print-rer .profile-content{display:block!important;height:auto!important;min-height:0!important;max-width:none!important;width:auto!important;padding:0!important;margin:0!important;border:0!important;box-shadow:none!important;background:#fff!important;overflow:visible!important;position:static!important}
-html.print-rer .profile-grid,html.print-rer .card,html.print-rer .toolbar,html.print-rer .pagination,html.print-rer .table-scroll{display:none!important}
+html.print-rer .profile-grid,html.print-rer .card,html.print-rer .toolbar,html.print-rer .pagination,html.print-rer .table-scroll,html.print-rer .form-layout,html.print-rer .form-aside,html.print-rer .tabs,html.print-rer .section-title{display:none!important}
 html.print-rer .arc-form,html.print-rer .rer-print-only{display:block!important;position:relative!important;width:194mm;max-width:194mm;margin:0 auto;overflow:visible!important;border:1px solid #999;border-radius:0;padding:3mm 3.5mm;font-size:8pt;line-height:1.22;background:#fff;color:#111;break-inside:avoid;page-break-inside:avoid;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
 html.print-rer .rer-print-only .arc-form{width:100%;max-width:none;margin:0;border:0;padding:0}
-html.print-rer .arc-form-head{grid-template-columns:12mm 1fr 12mm;gap:2mm;padding-bottom:1.5mm;margin-bottom:1.5mm}
-html.print-rer .arc-form-logo{width:12mm;height:12mm}
-html.print-rer .arc-form-head h1{font-size:16pt;letter-spacing:.015em}
-html.print-rer .arc-form-head p{font-size:7.5pt}
-html.print-rer .arc-form-head small{font-size:7pt}
+html.print-rer .arc-form-head{grid-template-columns:22mm 1fr 22mm;gap:2.5mm;padding-bottom:1.5mm;margin-bottom:1.5mm}
+html.print-rer .arc-form-logo{width:22mm;height:22mm;background:#ffcc00;border:0;box-shadow:none}
+html.print-rer .arc-form-head h1,html.print-rer .arc-form-head p{font-family:"Arial Black","Arial Bold",Arial,Helvetica,sans-serif!important;font-weight:900;letter-spacing:.02em}
+html.print-rer .arc-form-head h1{font-size:18pt}
+html.print-rer .arc-form-head p{font-size:11pt}
+html.print-rer .arc-form-head small{font-size:10pt;font-weight:900;font-family:"Arial Black","Arial Bold",Arial,Helvetica,sans-serif!important}
 html.print-rer .arc-id{padding-bottom:1mm;margin-bottom:1.5mm}
 html.print-rer .arc-id-line{font-size:8.5pt;margin:1px 0;gap:2px 6px}
 html.print-rer .arc-id-line b.grow,html.print-rer .arc-id-line .grow{min-width:0}
@@ -94,22 +95,31 @@ html.print-rer .arc-dose{grid-template-columns:22mm 1fr!important;min-height:25m
 html.print-rer .arc-center{border-left:1px solid #999;border-right:1px solid #999;padding:0 2mm}
 html.print-rer .arc-bodies svg{height:65mm}
 html.print-rer .arc-right,html.print-rer .arc-panel,html.print-rer .arc-dose-body,html.print-rer .arc-dose-meta{font-size:8pt}
+html.print-rer .arc-section-gap{margin-top:2.5mm}
 html.print-rer .arc-block h3,html.print-rer .arc-block.tight{font-size:9pt;font-weight:800;margin:0 0 1px}
 html.print-rer .arc-center h3,html.print-rer .arc-panel h3{font-size:8.5pt;margin:0 0 1px}
 html.print-rer .arc-form label,html.print-rer .arc-flags label{font-size:8pt}
 html.print-rer .arc-box{width:11px;height:11px}
-html.print-rer .arc-dose-heading strong{font-size:9pt}
-html.print-rer .arc-dose-meta b,html.print-rer .arc-dose-meta em{font-size:8pt}
+html.print-rer .arc-dose-heading strong,html.print-rer .arc-dose-label{font-size:9pt}
+html.print-rer .arc-dose-label,html.print-rer .arc-dose-date,html.print-rer .arc-dose-time{color:#111!important}
+html.print-rer .arc-dose-meta b,html.print-rer .arc-dose-meta em{font-size:8pt;color:#111}
+html.print-rer .arc-dose-meta .arc-dose-label{font-size:7.5pt}
+html.print-rer .arc-dose-meta .arc-dose-date{font-size:8.5pt}
+html.print-rer .arc-dose-meta .arc-dose-time{font-size:7pt}
+html.print-rer .arc-dose-meta .arc-vaccinator-name{font-size:8pt}
 html.print-rer .arc-dose-meta{padding:2px 3px}
 html.print-rer .arc-dose-body{padding:2px 4px}
+html.print-rer .arc-dose-options,html.print-rer .arc-animal-status,html.print-rer .arc-indent{padding-left:4.5mm}
+html.print-rer .arc-dose-options{grid-template-columns:max-content max-content;column-gap:4mm}
 html.print-rer .arc-panel{padding:2mm 2.5mm}
-html.print-rer .arc-side{gap:1.5mm;display:grid;grid-template-rows:21mm 23mm 41mm 1fr}
-html.print-rer .arc-sign-line{min-height:6mm;margin:2mm 0 1mm}
+html.print-rer .arc-side{gap:1.5mm;display:grid;grid-template-rows:24mm 22mm 40mm 1fr}
+html.print-rer .arc-sign-name{min-height:5mm}
+html.print-rer .arc-doc .arc-sign-name{min-height:8mm}
 html.print-rer .arc-remarks{font-size:8pt;margin-top:1.5mm;padding-top:1mm}
 html.print-rer .arc-form .body-marker{animation:none!important}
 html.print-rer .arc-chief{font-size:7pt}
 html.print-rer .arc-form{min-height:275mm}
-html.print-rer .arc-form-head{min-height:18mm}
+html.print-rer .arc-form-head{min-height:24mm}
 html.print-rer .arc-id{min-height:20mm}
 html.print-rer .arc-main{min-height:78mm}
 html.print-rer .arc-lower{min-height:125mm}
@@ -125,13 +135,14 @@ html.print-rer .arc-form,html.print-rer .arc-form *{-webkit-print-color-adjust:e
 .arc-box.on{color:#15803d;border-color:#15803d;background:#edf9f0}
 .arc-box svg{display:block;width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:2.7;stroke-linecap:round;stroke-linejoin:round}
 .arc-yn{white-space:nowrap}
-.arc-form-head{display:grid;grid-template-columns:54px 1fr 54px;gap:10px;align-items:center;border-bottom:2px solid #222;padding-bottom:8px;margin-bottom:8px}
-.arc-form-logo{width:54px;height:54px;border-radius:50%;overflow:hidden;border:2px solid #e6b800;flex:none}
-.arc-form-logo .brand-logo{width:100%;height:100%;object-fit:cover}
+.arc-form-head{display:grid;grid-template-columns:72px 1fr 72px;gap:10px;align-items:center;border-bottom:2px solid #222;padding-bottom:8px;margin-bottom:8px}
+.arc-form-logo{width:72px;height:72px;border-radius:50%;overflow:hidden;border:0;background:#ffcc00;flex:none;box-shadow:none}
+.arc-form-logo .brand-logo{width:100%;height:100%;object-fit:cover;display:block}
 .arc-form-title{min-width:0}
-.arc-form-head h1{margin:0;font-size:22px;font-weight:900;line-height:1.1;letter-spacing:.015em;text-align:center}
-.arc-form-head p{margin:2px 0 0;text-align:center;font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase}
-.arc-form-head small{display:block;text-align:center;font-size:9px;margin-top:2px}
+.arc-form-head h1,.arc-form-head p{font-family:"Arial Black","Arial Bold",Arial,Helvetica,sans-serif;font-weight:900;text-align:center;text-transform:uppercase;color:#111;letter-spacing:.02em}
+.arc-form-head h1{margin:0;font-size:26px;line-height:1.05}
+.arc-form-head p{margin:2px 0 0;font-size:14px;line-height:1.15}
+.arc-form-head small{display:block;text-align:center;font-family:"Arial Black","Arial Bold",Arial,Helvetica,sans-serif;font-size:12px;margin-top:2px;font-weight:900;letter-spacing:0;color:#111;text-transform:none}
 .arc-id{border-bottom:1px solid #222;padding-bottom:6px;margin-bottom:8px}
 .arc-id-line{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 10px;margin:3px 0;font-size:12px}
 .arc-id-line>span{font-weight:800;white-space:nowrap}
@@ -152,13 +163,16 @@ html.print-rer .arc-form,html.print-rer .arc-form *{-webkit-print-color-adjust:e
 .arc-center h3,.arc-panel h3{font-weight:800}
 .arc-erig-options{font-weight:400}
 .arc-doc-label{font-weight:800}
-.arc-block.tight{flex-direction:row;align-items:center;margin-top:6px;font-family:Manrope,'DM Sans',sans-serif;font-size:12px;font-weight:800;letter-spacing:.03em;color:#111}
-.arc-lr{margin-top:4px}.arc-lr.stacked{margin-top:8px}
-.arc-center{text-align:center;border-left:1px solid #ccc;border-right:1px solid #ccc;padding:0 6px}
+.arc-block.tight{flex-direction:column;align-items:flex-start;gap:3px;margin-top:6px;font-family:Manrope,'DM Sans',sans-serif;font-size:12px;font-weight:800;letter-spacing:.03em;color:#111}
+.arc-lr{margin-top:4px}
+.arc-center{position:relative;text-align:center;border-left:1px solid #ccc;border-right:1px solid #ccc;padding:0 6px}
+.arc-complaint-side{position:absolute;top:21px;left:8px;display:flex;flex-direction:column;align-items:flex-start;gap:2px;font-size:11px;white-space:nowrap}
+.arc-complaint-side span{display:flex;align-items:center;gap:2px}
 .arc-bodies svg{width:100%;height:210px;display:block}
 .arc-chief{font-size:10px;margin:4px 0 0;color:#333}
 .arc-right{display:flex;flex-direction:column;gap:3px;font-size:11px}
 .arc-row{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
+.arc-indent{padding-left:16px}
 .arc-row.wrap{gap:4px 10px}
 .arc-form u{text-decoration:none;border-bottom:1px solid #333;min-width:48px;padding:0 3px;display:inline-block}
 .arc-form u.arc-animal-other{min-width:72px;min-height:1em}
@@ -168,36 +182,38 @@ html.print-rer .arc-form,html.print-rer .arc-form *{-webkit-print-color-adjust:e
 .arc-doses{display:flex;flex-direction:column;border:1px solid #222}
 .arc-dose{display:grid;grid-template-columns:92px 1fr;border-bottom:1px solid #222;min-height:58px}
 .arc-dose:last-child{border-bottom:0}
-.arc-dose-meta{border-right:1px solid #222;padding:5px 6px;font-size:10px;display:flex;flex-direction:column;gap:1px}
+.arc-dose-meta{border-right:1px solid #222;padding:5px 6px;font-size:10px;display:flex;flex-direction:column;gap:2px}
 .arc-dose-meta span{font-weight:800}
-.arc-dose-meta .arc-dose-label{font-weight:900}
-.arc-dose-meta b,.arc-dose-meta em{font-style:normal;font-size:11px}
-.arc-dose-date,.arc-dose-time{white-space:nowrap;font-variant-numeric:tabular-nums}
+.arc-dose-meta .arc-dose-label{font-size:10px;font-weight:800;letter-spacing:0;line-height:1.15;color:#111}
+.arc-dose-meta .arc-vaccinator-label{margin-top:4px}
+.arc-dose-meta b,.arc-dose-meta em{font-style:normal;font-size:11px;color:#111;font-weight:700;line-height:1.15}
+.arc-dose-meta .arc-dose-time{font-size:9px;font-weight:500}
+.arc-dose-meta .arc-vaccinator-name{font-size:10px;font-weight:600;overflow-wrap:anywhere}
+.arc-dose-date,.arc-dose-time{white-space:nowrap;font-variant-numeric:tabular-nums;color:#111}
 .arc-dose-body{padding:4px 7px;font-size:11px;position:relative}
 .arc-dose-heading{display:flex;align-items:baseline;justify-content:space-between;gap:6px}
-.arc-dose-heading strong{display:block;font-size:12px;margin:0}
+.arc-dose-heading strong{display:block;font-size:12px;margin:0;font-weight:800;letter-spacing:.03em}
 .arc-dose-body .arc-lr{display:flex;align-items:center;gap:2px;margin:0;white-space:nowrap}
 .arc-dose-body label{margin:1px 0}
 .arc-dose-given,.arc-dose-advice{display:flex!important;width:100%;white-space:nowrap}
-.arc-dose-options{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:8px;line-height:1.15}
+.arc-dose-options{display:grid;grid-template-columns:max-content max-content;column-gap:14px;line-height:1.15;padding-left:16px}
 .arc-dose-options label{white-space:nowrap}
 .arc-dose-options.im-only .arc-im-option{grid-column:1}
-.arc-animal-status{display:flex;align-items:center;gap:12px;margin-top:2px}
+.arc-animal-status{display:flex;align-items:center;gap:12px;margin-top:2px;padding-left:16px}
 .arc-animal-status label{white-space:nowrap}
 .arc-side{display:flex;flex-direction:column;gap:6px}
 .arc-panel{border:1px solid #222;padding:6px 8px;font-size:11px}
 .arc-panel p,.arc-panel label{margin:2px 0}
+.arc-panel .arc-indent{padding-left:16px}
 .arc-progress-fields{display:block}
 .arc-progress-checks{display:flex;flex-direction:column;align-items:flex-start}
 .arc-progress-others{display:flex;align-items:baseline;gap:4px;min-width:0;white-space:nowrap}
 .arc-progress-others u{flex:0 0 72px;min-width:72px;min-height:1em}
-.arc-doc{display:flex;align-items:flex-end;gap:8px;margin-top:6px!important}
-.arc-doc-label{white-space:nowrap}
-.arc-doc-signature{display:flex;flex:1;min-width:0;flex-direction:column;align-items:center}
-.arc-doc-sign-line{display:block;width:100%;height:27px;border-bottom:1px solid #333}
-.arc-doc-signature b{font-size:inherit;line-height:1.15;text-align:center}
-.arc-sign-label{font-weight:800;letter-spacing:.04em;font-size:10px}
-.arc-sign-line{border-bottom:1px solid #222;min-height:22px;margin:8px 0 4px;font-weight:700}
+.arc-doc{display:flex;flex-direction:column;align-items:stretch;text-align:center;gap:0;margin-top:8px!important;padding-left:0;margin-left:0}
+.arc-consent-block{display:flex;flex-direction:column;align-items:stretch;text-align:center}
+.arc-sign-name{min-height:20px;font-weight:700;display:flex;align-items:flex-end;justify-content:center}
+.arc-sign-rule{border-top:1px solid #222;margin:2px 0 4px}
+.arc-sign-label{font-weight:800;letter-spacing:.04em;font-size:10px;margin:0!important}
 .arc-remarks{display:flex;flex-wrap:wrap;align-items:center;gap:10px;border-top:1px solid #222;margin-top:8px;padding-top:6px;font-size:11px}
 .arc-form{--rer-red:#a65a60;--rer-gold:#b48034;--rer-blue:#6f92a6}
 .arc-form-head,.arc-id,.arc-main,.arc-remarks{border-color:#aaa}
@@ -207,11 +223,13 @@ html.print-rer .arc-form,html.print-rer .arc-form *{-webkit-print-color-adjust:e
 .arc-center{border-color:#aaa}
 .arc-right b{color:var(--rer-gold)}
 .arc-right .arc-medical-heading{color:#111!important}
-.arc-right .arc-row{border-bottom:1px solid #e0ded9;padding-bottom:2px}
-.arc-right .arc-row:last-child{border-bottom:0}
+.arc-right .arc-row{padding-bottom:0}
+.arc-section-gap{margin-top:8px}
 .arc-dose-body strong{color:var(--rer-blue)}
 .arc-dose-meta>span{color:#686868}
+.arc-dose-meta .arc-dose-label,.arc-dose-date,.arc-dose-time{color:#111}
 .arc-sign-label{color:var(--rer-red)}
+.arc-doc .arc-sign-label{color:#111}
 .arc-form .arc-box{border-color:#59645e}
 .arc-form .arc-box.on{color:#15803d;border-color:#15803d}
 .arc-form .body-marker circle:first-child{fill:rgb(166 90 96 / 18%);stroke:var(--rer-red);stroke-width:3}
