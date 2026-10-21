@@ -48,9 +48,15 @@ function DoseBlock({row,g}){
 }
 
 export function printRer(){
+ const sheet=document.querySelector('.rer-print-only .arc-form')||document.querySelector('.arc-form')
+ if(!sheet)return
+ const host=document.createElement('div')
+ host.className='rer-print-host'
+ host.appendChild(sheet.cloneNode(true))
+ document.body.appendChild(host)
  const root=document.documentElement
  root.classList.add('print-rer')
- const clear=()=>{root.classList.remove('print-rer');window.removeEventListener('afterprint',clear)}
+ const clear=()=>{root.classList.remove('print-rer');host.remove();window.removeEventListener('afterprint',clear)}
  window.addEventListener('afterprint',clear)
  window.setTimeout(clear,120000)
  window.setTimeout(()=>window.print(),40)
@@ -122,7 +128,7 @@ export function RerSheet({e,p,doses}){
     <div className="arc-row arc-indent"><span className="arc-gold-label">Date of bite:</span> <u>{slash(e.biteDate)}</u> Time: <u>{e.biteTime||''}</u></div>
     <div className="arc-row arc-indent"><span className="arc-gold-label">SOB:</span> <Box on={e.side==='L'}/> L <Box on={e.side==='R'}/> R &nbsp; POB: <u>{e.place||''}</u></div>
     <div className="arc-row"><b>Washing of Wound:</b> <YN v={e.washed}/> Tandok: <YN v={e.tandok}/></div>
-    <div className="arc-row arc-section-gap"><b>TYPE OF WOUND:</b></div>
+    <div className="arc-row"><b>TYPE OF WOUND:</b></div>
     <div className="arc-row wrap">{['Abrasion','Lacerated','Bruised','Healed'].map(w=><label key={w}><Box on={(e.wound||[]).includes(w)}/> {w}</label>)}</div>
     <div className="arc-row arc-section-gap"><b className="arc-medical-heading">MEDICAL HISTORY:</b></div>
     <div className="arc-row wrap">

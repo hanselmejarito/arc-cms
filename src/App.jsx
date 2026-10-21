@@ -35,7 +35,7 @@ function BranchMenu({branch,setBranch,locked,sidebar,onPick}){
    {!locked&&<ChevronDown size={14} className="branch-chevron"/>}
   </button>
   {open&&<div className="popover branch-pop" role="listbox">
-   <button role="option" aria-selected={branch==='All branches'} className={branch==='All branches'?'selected':''} onClick={()=>pick('All branches')}><span className="branch-dot all"><GitBranch size={12}/></span><span className="branch-name">All branches<small>11 branches · one still unconfirmed</small></span>{branch==='All branches'&&<Check size={15}/>}</button>
+   <button role="option" aria-selected={branch==='All branches'} className={branch==='All branches'?'selected':''} onClick={()=>pick('All branches')}><span className="branch-dot all"><GitBranch size={12}/></span><span className="branch-name">All branches<small>11 confirmed branches</small></span>{branch==='All branches'&&<Check size={15}/>}</button>
    <div className="branch-pop-label">BRANCHES</div>
    <div className="branch-pop-list">{branchMaster.map(b=><button key={b.name} role="option" aria-selected={branch===b.name} className={branch===b.name?'selected':''} onClick={()=>pick(b.name)}><span className="branch-dot">{b.name[0]}</span><span className="branch-name">{b.name}<small>{[b.accreditation==='Accredited'&&'PhilHealth accredited',b.night&&'Night shift'].filter(Boolean).join(' · ')||'Morning shift'}</small></span>{branch===b.name&&<Check size={15}/>}</button>)}</div>
   </div>}
@@ -56,20 +56,20 @@ export default function App(){
  const [notifications,setNotifications]=React.useState(false)
  const [patientId,setPatientId]=React.useState(seedPatients[0].id)
  const [encounterId,setEncounterId]=React.useState(null)
- const [patients,setPatients]=useStored('arc17-patients',seedPatients)
- const [encounters,setEncounters]=useStored('arc17-encounters',seedEncounters)
- const [doses,setDoses]=useStored('arc17-doses',seedDoses)
- const [inventory,setInventory]=useStored('arc17-inventory',seedInventory)
- const [ledger,setLedger]=useStored('arc17-ledger',seedLedger)
- const [received,setReceived]=useStored('arc17-received',receivedReport)
- const [movements,setMovements]=useStored('arc17-movements',[])
- const [payments,setPayments]=useStored('arc17-payments',seedPayments)
- const [finance,setFinance]=useStored('arc17-finance',financeEntries)
- const [referrals,setReferrals]=useStored('arc17-referrals',seedReferrals)
- const [refunds,setRefunds]=useStored('arc17-refunds',seedRefunds)
- const [attendance,setAttendance]=useStored('arc17-attendance',attendanceLog)
- const [notes,setNotes]=useStored('arc17-notes',progressNotes)
- const [activity,setActivity]=useStored('arc17-activity',[])
+ const [patients,setPatients]=useStored('arc18-patients',seedPatients)
+ const [encounters,setEncounters]=useStored('arc18-encounters',seedEncounters)
+ const [doses,setDoses]=useStored('arc18-doses',seedDoses)
+ const [inventory,setInventory]=useStored('arc18-inventory',seedInventory)
+ const [ledger,setLedger]=useStored('arc18-ledger',seedLedger)
+ const [received,setReceived]=useStored('arc18-received',receivedReport)
+ const [movements,setMovements]=useStored('arc18-movements',[])
+ const [payments,setPayments]=useStored('arc18-payments',seedPayments)
+ const [finance,setFinance]=useStored('arc18-finance',financeEntries)
+ const [referrals,setReferrals]=useStored('arc18-referrals',seedReferrals)
+ const [refunds,setRefunds]=useStored('arc18-refunds',seedRefunds)
+ const [attendance,setAttendance]=useStored('arc18-attendance',attendanceLog)
+ const [notes,setNotes]=useStored('arc18-notes',progressNotes)
+ const [activity,setActivity]=useStored('arc18-activity',[])
  const [toast,setToast]=React.useState('')
  React.useEffect(()=>{if(toast){const t=setTimeout(()=>setToast(''),3500);return()=>clearTimeout(t)}},[toast])
  const notify=(message,type='Update')=>{setToast(message);setActivity(a=>[{title:message,patient:'Alex Rivera ('+role+')',branch:branch==='All branches'?'Guimba':branch,time:new Date().toLocaleTimeString('en-PH',{hour:'numeric',minute:'2-digit'}),type},...(a||[])].slice(0,30))}

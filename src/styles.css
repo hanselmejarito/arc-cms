@@ -78,8 +78,9 @@ html,body{background:#fff!important}
 html.print-rer,html.print-rer body{height:auto!important;overflow:visible!important;background:#fff!important}
 html.print-rer .app,html.print-rer .main-shell,html.print-rer .content,html.print-rer .profile-content{display:block!important;height:auto!important;min-height:0!important;max-width:none!important;width:auto!important;padding:0!important;margin:0!important;border:0!important;box-shadow:none!important;background:#fff!important;overflow:visible!important;position:static!important}
 html.print-rer .profile-grid,html.print-rer .card,html.print-rer .toolbar,html.print-rer .pagination,html.print-rer .table-scroll,html.print-rer .form-layout,html.print-rer .form-aside,html.print-rer .tabs,html.print-rer .section-title{display:none!important}
-html.print-rer .arc-form,html.print-rer .rer-print-only{display:block!important;position:relative!important;width:194mm;max-width:194mm;margin:0 auto;overflow:visible!important;border:1px solid #999;border-radius:0;padding:3mm 3.5mm;font-size:8pt;line-height:1.22;background:#fff;color:#111;break-inside:avoid;page-break-inside:avoid;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
-html.print-rer .rer-print-only .arc-form{width:100%;max-width:none;margin:0;border:0;padding:0}
+html.print-rer .app,html.print-rer .toast{display:none!important}
+html.print-rer .rer-print-host{display:block!important;width:194mm;max-width:194mm;margin:0 auto}
+html.print-rer .rer-print-host .arc-form,html.print-rer .arc-form{display:block!important;position:relative!important;width:194mm;max-width:194mm;margin:0 auto;overflow:visible!important;border:1px solid #999;border-radius:0;padding:3mm 3.5mm;font-size:8pt;line-height:1.22;background:#fff;color:#111;break-inside:auto;page-break-inside:auto;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
 html.print-rer .arc-form-head{grid-template-columns:22mm 1fr 22mm;gap:2.5mm;padding-bottom:1.5mm;margin-bottom:1.5mm}
 html.print-rer .arc-form-logo{width:22mm;height:22mm;background:#ffcc00;border:0;box-shadow:none}
 html.print-rer .arc-form-head h1,html.print-rer .arc-form-head p{font-family:"Arial Black","Arial Bold",Arial,Helvetica,sans-serif!important;font-weight:900;letter-spacing:.02em}
@@ -118,7 +119,7 @@ html.print-rer .arc-doc .arc-sign-name{min-height:8mm}
 html.print-rer .arc-remarks{font-size:8pt;margin-top:1.5mm;padding-top:1mm}
 html.print-rer .arc-form .body-marker{animation:none!important}
 html.print-rer .arc-chief{font-size:7pt}
-html.print-rer .arc-form{min-height:275mm}
+html.print-rer .arc-form{min-height:0}
 html.print-rer .arc-form-head{min-height:24mm}
 html.print-rer .arc-id{min-height:20mm}
 html.print-rer .arc-main{min-height:78mm}
