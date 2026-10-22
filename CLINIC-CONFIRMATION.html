@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="fil">
+<head>
+<meta charset="utf-8"/>
+<title>ARC Clinic — Client Confirmation (print)</title>
+<style>
+  :root { --ink:#1a2332; --line:#c9d0da; --soft:#f4f6f8; --mark:#1e4d7b; }
+  * { box-sizing: border-box; }
+  body { font: 11.5pt/1.4 "Segoe UI", Calibri, Arial, sans-serif; color: var(--ink); margin: 0; }
+  .sheet { max-width: 210mm; margin: 0 auto; padding: 14mm 16mm 18mm; }
+  h1 { font-size: 18pt; margin: 0 0 4pt; }
+  h2 { font-size: 13pt; margin: 18pt 0 8pt; border-bottom: 2px solid var(--mark); padding-bottom: 3pt; page-break-after: avoid; }
+  h3 { font-size: 11.5pt; margin: 12pt 0 4pt; page-break-after: avoid; }
+  p, li { margin: 0 0 6pt; }
+  .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 6pt 16pt; background: var(--soft); padding: 10pt 12pt; margin: 10pt 0 14pt; }
+  .meta label { display: block; font-size: 8.5pt; text-transform: uppercase; letter-spacing: .04em; color: #5a6573; }
+  .line { border-bottom: 1px solid #222; min-height: 16pt; margin-top: 2pt; }
+  .note { background: #fff8e6; border: 1px solid #e6d39a; padding: 8pt 10pt; margin: 8pt 0 12pt; }
+  .now { background: #eef4fa; border-left: 4px solid var(--mark); padding: 6pt 10pt; margin: 6pt 0 8pt; }
+  .choice { display: flex; gap: 14pt; flex-wrap: wrap; font-size: 10.5pt; margin: 4pt 0 8pt; }
+  .choice span { white-space: nowrap; }
+  .box { display: inline-block; width: 11pt; height: 11pt; border: 1.4px solid #222; vertical-align: -2pt; margin-right: 3pt; }
+  table { width: 100%; border-collapse: collapse; margin: 6pt 0 12pt; font-size: 10pt; }
+  th, td { border: 1px solid var(--line); padding: 4pt 6pt; text-align: left; vertical-align: top; }
+  th { background: var(--soft); font-size: 8.5pt; text-transform: uppercase; }
+  .q { margin: 0 0 10pt; page-break-inside: avoid; }
+  .q p { margin: 0 0 3pt; }
+  .q .ask { font-weight: 650; }
+  .blank { min-height: 28pt; border-bottom: 1px dotted #888; margin: 2pt 0 8pt; }
+  .sign { display: grid; grid-template-columns: 1fr 1fr; gap: 24pt; margin-top: 18pt; }
+  .sign .pad { border-top: 1px solid #222; padding-top: 6pt; margin-top: 36pt; font-size: 10pt; }
+  .small { font-size: 9.5pt; color: #445; }
+  ol.scene { padding-left: 18pt; }
+  @media print {
+    body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    .sheet { padding: 10mm 12mm; max-width: none; }
+    h2 { page-break-before: auto; }
+    .cover { page-break-after: always; }
+    .break { page-break-before: always; }
+    .no-print { display: none; }
+  }
+  .no-print { text-align: center; padding: 10pt; background: #1e4d7b; color: #fff; }
+  .no-print button { font-size: 12pt; padding: 6pt 16pt; cursor: pointer; }
+</style>
+</head>
+<body>
+<div class="no-print">Print this page — A4, portrait · Ctrl+P / Cmd+P &nbsp; <button onclick="window.print()">Print</button></div>
+<div class="sheet">
+
+<section class="cover">
+  <p class="small">ARC Anti Rabies Clinic · internal confirmation · fictional names in scenarios</p>
+  <h1>Client confirmation sheet</h1>
+  <p>I-check ang bawat item: <b>Tama</b> (ganito ang clinic), <b>Mali</b> (iba ang gawain), o <b>Palitan</b> (isulat kung ano). Hindi ito demo script lang — ito ang naka-code ngayon. Kung Tama, i-lock namin. Kung Mali/Palitan, huwag baguhin ang code hangga’t may pirma dito.</p>
+  <div class="meta">
+    <div><label>Petsa ng confirmation</label><div class="line"></div></div>
+    <div><label>Branch / meeting place</label><div class="line"></div></div>
+    <div><label>Pangalan (clinic)</label><div class="line"></div></div>
+    <div><label>Position</label><div class="line"></div></div>
+    <div><label>Pangalan (project)</label><div class="line"></div></div>
+    <div><label>Present (iba pa)</label><div class="line"></div></div>
+  </div>
+  <div class="note">
+    <b>Paano sagutan.</b> Basahin ang senaryo. Ang kahon na “Sa system ngayon” ay ang actual behavior. Sagutin kung iyon ba ang gusto ninyo sa production. Isulat ang tamang gawain kung iba.
+  </div>
+</section>
+
+<h2>0. Bukas na desisyon — Day 0 vs RER vs Treatment</h2>
+<p>May fields sa Treatment (dose 2 sites / 1 site / IM, oras ng tusok, animal ALIVE/LOST/DEAD sa dose, TT, ERIG skin test, mL) na wala sa RER (exposure, category, brand, route).</p>
+<div class="now"><b>Sa system ngayon:</b> kapag na-save ang RER at PEP ang case, automatic ang Day 0 (walk-in = bayad muna). Defaults: ID = 0.1 mL × 2 sites, L/R = bite side, animal = Alive, oras = admission time. TT at ERIG nandoon pa sa Treatment.</div>
+<div class="q">
+  <p class="ask">Alin ang gusto ninyo? (isang check lang)</p>
+  <p><span class="box"></span> <b>A.</b> Auto Day 0 pag-save ng RER (ganito ngayon). Nurse mag-correct sa Treatment kung 1 site / ibang oras.</p>
+  <p><span class="box"></span> <b>B.</b> RER + Day 0 panel sa iisang screen bago mag-Save (date/time, 2 sites / 1 site / IM, L/R, animal status, vaccinator). TT/ERIG sa Treatment pa rin.</p>
+  <p><span class="box"></span> <b>C.</b> RER muna, walang auto Day 0. Treatment page ang magre-record ng Day 0 (kasama TT/ERIG kung meron).</p>
+  <div class="blank"></div>
+  <p class="choice"><span><span class="box"></span> Tama na ang napili</span><span><span class="box"></span> Kailangan pag-usapan pa</span></p>
+</div>
+<div class="q">
+  <p class="ask">Pagkatapos mag-RER, tinutusok na ba agad ang pasyente sa same visit?</p>
+  <p class="choice"><span><span class="box"></span> Oo, lagi</span><span><span class="box"></span> Oo, kung PEP</span><span><span class="box"></span> Hindi, may hiwalay na pila sa treatment</span></p>
+</div>
+<div class="q">
+  <p class="ask">Bago umalis ang Day 0 patient, kailangan bang complete sa papeles ang: dose option, vaccinator, TT, at ERIG (kung Cat III)?</p>
+  <p class="choice"><span><span class="box"></span> Oo, lahat</span><span><span class="box"></span> Vaccine lang; TT/ERIG optional</span><span><span class="box"></span> Iba:</span></p>
+  <div class="blank"></div>
+</div>
+
+<h2>1. Patient management — admissions</h2>
+
+<h3>Senaryo 1 — Bagong walk-in</h3>
+<p>Si <b>Ana Cruz</b>, 28, unang beses sa <b>Guimba</b>. Nakagat sa braso, walang PhilHealth.</p>
+<div class="now"><b>Sa system:</b> New patient → last, first, birthday, gender required. Guardian optional. Registry auto: <b>ARCGUI-26-0001</b> (ARC + 3-letter code + year + 4 digits, resets yearly). Billing = Walk-in. Continue to RER. Bayad bago Day 0.</div>
+<div class="q"><p class="ask">Tama ba ang registry format na ARC{CODE}-YY-0001?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Mali</span><span><span class="box"></span> Palitan:</span></p><div class="blank"></div></div>
+<div class="q"><p class="ask">Tama ba na cellphone optional, pero last / first / birthday / gender required?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Mali / required din ang:</span></p><div class="blank"></div></div>
+<div class="q"><p class="ask">Flags: Senior (auto kung age ≥ 60), PWD, Vetmed, PhilHealth — tama ba ang listahan?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Palitan / dagdag:</span></p><div class="blank"></div></div>
+
+<h3>Senaryo 2 — Minor, walang kasama</h3>
+<p>Si <b>Paolo Reyes</b>, 12, nakakasulat ng pangalan, walang parent sa clinic.</p>
+<div class="now"><b>Sa system:</b> Guardian optional. Puwedeng mag-sign ang minor kung nakakasulat ng pangalan.</div>
+<div class="q"><p class="ask">Tama ba ito sa inyo? May age floor ba (hal. 15+ lang ang pwedeng mag-sign)?</p><p class="choice"><span><span class="box"></span> Tama, kahit anong edad kung nakakasulat</span><span><span class="box"></span> Guardian required kung menor</span><span><span class="box"></span> Age floor:</span></p><div class="blank"></div></div>
+
+<h3>Senaryo 3 — Returning, complete na ang last PEP, bagong kagat</h3>
+<p>Si <b>Mika Santos</b>, last case Complete. Nakagat ulit.</p>
+<div class="now"><b>Sa system:</b> Returning patient (hindi New). Bagong admission + <b>bagong registry</b>. Iisang patient record. Lumang visits naiwan sa profile.</div>
+<div class="q"><p class="ask">Tama ba: Complete + bagong kagat = bagong registry, same tao?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Mali — gamitin ang lumang registry</span></p></div>
+
+<h3>Senaryo 4 — Returning, ongoing pa / For RER pa</h3>
+<p>Si <b>Jules</b>, Day 3 pa lang, bumalik. O hindi pa tapos ang RER.</p>
+<div class="now"><b>Sa system:</b> walang bagong registry. Continue existing case. Kapag other branch, referral muna.</div>
+<div class="q"><p class="ask">Kung nakagat ulit habang ongoing ang PEP, itutuloy ang existing series (hindi bagong registry)?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Mali — palaging bagong admission</span></p></div>
+
+<h3>Senaryo 5 — Kaparehong pangalan, ibang branch</h3>
+<p>New patient sa Cabanatuan: same first, middle, last, birthday ng pasyente sa Guimba.</p>
+<div class="now"><b>Sa system:</b> warning lang. Hindi auto-merge. Prompt: gamitin Returning, hindi New. Same branch = block / use Returning.</div>
+<div class="q"><p class="ask">Tama ba na cross-branch duplicate = warning only (hindi auto-link)?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Dapat i-block</span><span><span class="box"></span> Dapat auto-merge</span></p></div>
+<div class="q"><p class="ask">Middle name: optional, mother’s maiden. Kapag blangko vs may middle, same person pa rin ba?</p><p class="choice"><span><span class="box"></span> Match dapat kasama ang middle (ganito ngayon)</span><span><span class="box"></span> Match kahit walang middle</span></p></div>
+
+<h2 class="break">2. RER / exposure</h2>
+<p>Category I / II / III tinatakda ng clinic personnel. System hindi nagdi-diagnose. Head / Hand / Foot → Category III.</p>
+<div class="q"><p class="ask">Tama ba na high-risk sites (Head, Hand, Foot) ay auto Category III?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Staff pa rin ang pipili, walang auto</span></p></div>
+<div class="q"><p class="ask">Category I (lamas, intact skin) = No PEP, walang vaccine schedule?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Mali — meron pa ring:</span></p><div class="blank"></div></div>
+<div class="q"><p class="ask">PEP eligible (DOH) toggle: kailan ninyo tina-turn off?</p><div class="blank"></div></div>
+<div class="q"><p class="ask">Booster vs Pre-exposure (PrEP) vs regular PEP — tama ba ang paghihiwalay sa form?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Palitan ang tawag / rules:</span></p><div class="blank"></div></div>
+<div class="q"><p class="ask">Vaccine types: PCEC (ChiroRab, VaxiRab N) at PVRV (Bioshoot, Speeda, Abhayrab). RIG: Equirab, Vinrab, HRIG. Tama ba ang master list?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Palitan / dagdag brand:</span></p><div class="blank"></div></div>
+<div class="q"><p class="ask">Vaccinator = active <b>Nurse / Staff</b> ng servicing branch (hindi hiwalay na 5-name list; hindi PO/cashier). Tama ba?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> PO puwede ring magtusok</span><span><span class="box"></span> Iba:</span></p><div class="blank"></div></div>
+<div class="q"><p class="ask">Print RER: kopya ng ARC Animal Bite Center form. SOAP / progress notes hindi kasama sa print. Tama ba?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Dapat kasama ang SOAP</span></p></div>
+
+<h2>3. Treatment, schedule, inventory ng dose</h2>
+<div class="now"><b>Schedule mula Day 0 (naka-lock kung inaprubahan na):</b> ID D0 / D3 / D7 / D28 · IM + D14 · Booster D0 / D3 · PrEP D0 / D2 / D14. Maaga o late man, <b>hindi gumagalaw</b> ang scheduled date. After 7 days past missed due → Incomplete, locked, walang further doses.</div>
+<div class="q"><p class="ask">Tama ba ang day offsets at labels (Day 21/28, PrEP Day 14/28)?</p><p class="choice"><span><span class="box"></span> Tama, lock</span><span><span class="box"></span> Palitan:</span></p><div class="blank"></div></div>
+<div class="q"><p class="ask">7-day grace tapos Incomplete/lock — tama ba? Ibang bilang?</p><p class="choice"><span><span class="box"></span> 7 days, lock</span><span><span class="box"></span> Ibang grace:</span><span><span class="box"></span> Huwag i-lock, tuloy pa rin</span></p><div class="blank"></div></div>
+<div class="q"><p class="ask">PCEC 1 vial = 10 uses; PVRV 1 vial = 5 uses; ID 2 sites = 2 uses; ID 1 site = 1 use; IM = buong vial. Tama ba?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Palitan:</span></p><div class="blank"></div></div>
+<div class="q"><p class="ask">TT = 1 vial per patient treatment. Serum / ERIG = staff mag-Stock Out ng actual vials (hindi auto). Tama ba?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Auto-compute serum by kg:</span></p><div class="blank"></div></div>
+<div class="q"><p class="ask">FIFO by expiry per branch. Tama ba?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Staff pipili ng batch</span></p></div>
+<div class="q"><p class="ask">Reminders: in-app lang (schedule + bell). Walang SMS. Staff magte-text/tawag sa sariling phone gamit ang listed number. Tama ba?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Gusto pa rin ng SMS later</span></p></div>
+
+<h3>Senaryo 6 — Late sa Day 3</h3>
+<p>Day 0 Oct 14 → Day 3 scheduled Oct 17. Dumating Oct 19.</p>
+<div class="now">Dose mare-record sa Oct 19. Scheduled date naka-stay Oct 17. Next Day 7 = Oct 21 pa rin (mula Day 0).</div>
+<div class="q"><p class="ask">Tama ba na hindi nagbabago ang calendar kahit late/maaga?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> I-shift ang susunod na araw mula actual visit</span></p></div>
+
+<h2>4. Payments, PhilHealth, referral, refund</h2>
+
+<h3>Senaryo 7 — Walk-in, bayad</h3>
+<div class="now">Walk-in kailangan Paid + amount &gt; 0 bago mag-dose. Official receipt sa hiwalay na device; dito external reference lang. Demo prices: vaccine ₱950, +ERIG ₱2750, booster ₱950, TT ₱250, flu ₱1100, pneumococcal ₱1800, consult ₱300.</div>
+<div class="q"><p class="ask">Tama ba: walang tusok hangga’t hindi bayad ang walk-in?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Pwede tumusok muna, bayad later</span></p></div>
+<div class="q"><p class="ask">I-confirm ang presyo (o isulat ang official list):</p>
+<table>
+  <tr><th>Service</th><th>Demo ₱</th><th>Official ₱</th><th>Tama?</th></tr>
+  <tr><td>Anti-rabies vaccine dose</td><td>950</td><td></td><td><span class="box"></span></td></tr>
+  <tr><td>Vaccine + ERIG (Cat III)</td><td>2750</td><td></td><td><span class="box"></span></td></tr>
+  <tr><td>Booster dose</td><td>950</td><td></td><td><span class="box"></span></td></tr>
+  <tr><td>Tetanus Toxoid</td><td>250</td><td></td><td><span class="box"></span></td></tr>
+  <tr><td>Flu (Influvac)</td><td>1100</td><td></td><td><span class="box"></span></td></tr>
+  <tr><td>Pneumococcal</td><td>1800</td><td></td><td><span class="box"></span></td></tr>
+  <tr><td>Consultation / wound care</td><td>300</td><td></td><td><span class="box"></span></td></tr>
+</table>
+</div>
+
+<h3>Senaryo 8 — PhilHealth sa accredited (Guimba)</h3>
+<div class="now">PhilHealth bill = ₱0. Day 0 puwedeng mag-record nang walang cash.</div>
+<div class="q"><p class="ask">Tama ba na accredited PhilHealth = ₱0 sa system (reimbursement sa labas)?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> May co-pay:</span></p><div class="blank"></div></div>
+
+<h3>Senaryo 9 — For PhilHealth sa hindi accredited (Baloc)</h3>
+<p>May PhilHealth, unang punta sa Baloc.</p>
+<div class="now">Hindi sisingilin. RER then refer sa accredited. Walang Day 0 sa Baloc kung For PhilHealth. Origin registry naiwan. Accept sa Guimba = bagong receiving registry, naka-link. Day 0 dates mula origin kung doon natusok.</div>
+<div class="q"><p class="ask">Tama ba ang flow na ito?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Sa Baloc tinutusok pa rin (walk-in pay) bago mag-refer</span><span><span class="box"></span> Iba:</span></p><div class="blank"></div></div>
+<div class="q"><p class="ask">Referral: non-accredited → accredited only. Tama ba? Pwede ba accredited → accredited?</p><p class="choice"><span><span class="box"></span> Non-acc → acc lang (ganito)</span><span><span class="box"></span> Kahit anong branch to branch</span></p></div>
+
+<h3>Senaryo 10 — Cash bayad, tapos na-refer for PhilHealth</h3>
+<div class="now">Original payment naiwan. Hiwalay na refund request sa paying branch. Approve: Admin o PO. Release sa original paying branch.</div>
+<div class="q"><p class="ask">Tama ba ang refund flow at sino ang pwedeng mag-approve?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Palitan ang approver:</span></p><div class="blank"></div></div>
+
+<h2 class="break">5. Inventory (stock, hindi dose)</h2>
+<div class="now">Per branch, per batch. MS 7:00 AM–4:00 PM (close cutoff 4:00 PM). NS 4:00 PM–11:00 PM sa night-duty branches. Low stock = at/below threshold. Near expiry = 60 days. Supplier management excluded.</div>
+<div class="q"><p class="ask">Tama ba ang shift windows at 4:00 PM inventory close?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Palitan:</span></p><div class="blank"></div></div>
+<div class="q"><p class="ask">Thresholds (vials): vaccines 30, Serum 5, TT 20, Influvac 4, Pneumococcal 3. Tama ba per item/branch?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Iba ang threshold:</span></p><div class="blank"></div></div>
+<div class="q"><p class="ask">Near expiry flag: 60 days. Tama ba?</p><p class="choice"><span><span class="box"></span> 60</span><span><span class="box"></span> Ibang araw:</span></p><div class="blank"></div></div>
+<div class="q"><p class="ask">Stock transfer between branches: record Stock Out + Stock In (walang auto-transfer document). Tama ba?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Gusto ng transfer form</span></p></div>
+<div class="q"><p class="ask">Adjustment reasons: Damaged, Expired, Missing, Correction, Transfer to other branch, Other. Tama ba?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Dagdag:</span></p><div class="blank"></div></div>
+
+<h2>6. Finance tracker</h2>
+<div class="now">Operational cash-in/expense lang. Walang GL, BIR, AP/AR, formal FS. Income: Other, PhilHealth reimbursement, Miscellaneous. Expense: Utilities, Rent, Medical supplies, Transportation, Repairs, Office supplies, Miscellaneous. Sales galing sa Paid walk-in payments.</div>
+<div class="q"><p class="ask">Tama ba ang saklaw (tracker lang, hindi accounting)?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Kailangan pa:</span></p><div class="blank"></div></div>
+<div class="q"><p class="ask">Tama ba ang income/expense categories?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Palitan:</span></p><div class="blank"></div></div>
+
+<h2>7. People — employees, attendance, payroll</h2>
+<div class="now">Login ≠ attendance. Time In / Time Out sa app. Walang Bundy clock. <b>Lahat ng empleyado may login at sila mismo ang mag-Time In / Time Out.</b> <b>Admin = super admin</b> (lahat ng pages, lahat ng branch). Login lang siya — hindi employee, walang Time In. Walang Owner role. Walang OJT / intern records — hindi tumatanggap ang clinic. Nurse MS 7–4, PO MS 8–5, NS 4–11 (Nurse &amp; PO). Night shift employee allowed lang kung night-duty ang branch. <b>Payroll auto mula sa Time In / Time Out</b> (duty days, late, undertime, night hours). Admin / HR puwedeng mag-update na may reason. Dalawang login ng iisang tao = isang araw (earliest in / latest out). OT = approved only, hindi auto. Night diff 10% of hourly per night hour. Regular holiday +100%, special +30%. Officer allowance ₱500/cutoff. Cutoff 10th/25th, pay 15th/30th. Demo SSS 5% / PhilHealth 2.5% / Pag-IBIG 2% — official tables i-maintain ng authorized user. Override kailangan ng reason + audit.</div>
+<div class="q"><p class="ask">Tama ba: sign-in sa system hindi counted as Time In?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Auto Time In sa login</span></p></div>
+<div class="q"><p class="ask">Lahat ng empleyado may login at mag-Time In / Time Out sa system. Walang OJT. (naka-lock kung inaprubahan)</p><p class="choice"><span><span class="box"></span> Tama, lock</span><span><span class="box"></span> Palitan:</span></p><div class="blank"></div></div>
+<div class="q"><p class="ask">Duty hours (Nurse 7–4, PO 8–5, night 4–11) — tama ba?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Palitan:</span></p><div class="blank"></div></div>
+<div class="q"><p class="ask">Payroll auto mula sa Time In / Time Out; Admin / HR lang ang pwedeng mag-update (may reason). OT hindi auto. Tama ba?</p><p class="choice"><span><span class="box"></span> Tama, lock</span><span><span class="box"></span> Palitan:</span></p><div class="blank"></div></div>
+<div class="q"><p class="ask">Payroll formulas (daily, late, OT, ND 10%, holidays, ₱500 officer) — tama ba?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Palitan:</span></p><div class="blank"></div></div>
+<div class="q"><p class="ask">Cutoff 10/25, pay 15/30 — tama ba?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Palitan:</span></p><div class="blank"></div></div>
+<div class="q"><p class="ask">Sino officer para sa ₱500? (demo: Lyka Tenorio, Kim Diaz, Amery Maligaya, Michelle Clor, Gelai Aban — check sa inyo)</p><div class="blank"></div></div>
+<div class="q"><p class="ask">Attendance correction: sino ang pwedeng mag-correct?</p><p class="choice"><span><span class="box"></span> Admin / HR (payroll admins)</span><span><span class="box"></span> Iba:</span></p><div class="blank"></div></div>
+
+<h2>8. Reports</h2>
+<div class="now">Clinic reports from recorded transactions (patient, finance, inventory, payroll). Registry = DOH NRPCP format from admissions/RER/treatment. DOH page: Region III, municipality totals, human rabies cases manual encode. Walang government API.</div>
+<div class="q"><p class="ask">Tama ba na registry/DOH reports generated from clinic records, tapos export/print — walang auto-submit sa DOH?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Kailangan ng online DOH submit</span></p></div>
+<div class="q"><p class="ask">Anong reports ang kailangan ninyo na wala pa?</p><div class="blank"></div></div>
+
+<h2 class="break">9. Users, roles, audit</h2>
+<p>Draft matrix (i-confirm). Branch roles makikita lang ang assigned branch. Admin = super admin (lahat). HR = all-branch people/payroll. Walang Owner role.</p>
+<table>
+  <tr><th>Module</th><th>Admin</th><th>HR</th><th>Nurse</th><th>PO</th><th>Sec</th><th>Cashier</th><th>Emp</th></tr>
+  <tr><td>Dashboard</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td></tr>
+  <tr><td>Patients &amp; admissions</td><td>✓</td><td>—</td><td>✓</td><td>✓</td><td>✓</td><td>View</td><td>—</td></tr>
+  <tr><td>RER / treatment / SOAP</td><td>✓</td><td>—</td><td>✓</td><td>✓</td><td>—</td><td>—</td><td>—</td></tr>
+  <tr><td>Follow-up schedule</td><td>✓</td><td>—</td><td>✓</td><td>✓</td><td>✓</td><td>—</td><td>—</td></tr>
+  <tr><td>Inventory in/out</td><td>✓</td><td>—</td><td>✓</td><td>✓</td><td>—</td><td>—</td><td>—</td></tr>
+  <tr><td>Stock adjustments</td><td>✓</td><td>—</td><td>—</td><td>✓</td><td>—</td><td>—</td><td>—</td></tr>
+  <tr><td>Payments / sales</td><td>✓</td><td>—</td><td>—</td><td>✓</td><td>✓</td><td>✓</td><td>—</td></tr>
+  <tr><td>Finance tracker</td><td>✓</td><td>—</td><td>—</td><td>✓</td><td>—</td><td>✓</td><td>—</td></tr>
+  <tr><td>Referrals</td><td>✓</td><td>—</td><td>✓</td><td>✓</td><td>✓</td><td>✓</td><td>—</td></tr>
+  <tr><td>Refund approval</td><td>✓</td><td>—</td><td>—</td><td>✓</td><td>—</td><td>—</td><td>—</td></tr>
+  <tr><td>Employees</td><td>✓</td><td>✓</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+  <tr><td>Attendance</td><td>✓</td><td>✓</td><td>Own</td><td>Own</td><td>Own</td><td>Own</td><td>Own</td></tr>
+  <tr><td>Attendance correction</td><td>✓</td><td>✓</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+  <tr><td>Payroll</td><td>✓</td><td>✓</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+  <tr><td>Payslips</td><td>✓</td><td>Payroll</td><td>Own</td><td>Own</td><td>Own</td><td>Own</td><td>Own</td></tr>
+  <tr><td>Clinic reports</td><td>✓</td><td>—</td><td>—</td><td>✓</td><td>—</td><td>Finance</td><td>—</td></tr>
+  <tr><td>DOH registry / report</td><td>✓</td><td>—</td><td>✓</td><td>✓</td><td>View</td><td>—</td><td>—</td></tr>
+  <tr><td>All-branch access</td><td>✓</td><td>✓</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+  <tr><td>Users, branches, settings</td><td>✓</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+</table>
+<div class="q"><p class="ask">Tama ba ang role names at matrix?</p><p class="choice"><span><span class="box"></span> Tama, lock</span><span><span class="box"></span> Palitan (markahan sa table / isulat):</span></p><div class="blank"></div></div>
+<div class="q"><p class="ask">Secretary: admissions + schedule + payments + referrals, walang RER/treatment. Tama ba?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Secretary dapat makapag-RER</span></p></div>
+<div class="q"><p class="ask">Cashier: payments/finance/referrals/refunds view? Walang clinical encode. Tama ba?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Palitan:</span></p><div class="blank"></div></div>
+<div class="q"><p class="ask">Audit trail sa material changes (patient, treatment, inventory, finance, payroll). Tama ba ang saklaw?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Dagdag:</span></p><div class="blank"></div></div>
+
+<h2>10. Branches</h2>
+<p>11 branches confirmed. I-check accreditation at night duty.</p>
+<table>
+  <tr><th>Branch</th><th>Code</th><th>PhilHealth (system)</th><th>Night (system)</th><th>Hours (system)</th><th>Tama?</th><th>Palitan</th></tr>
+  <tr><td>Guimba (Main)</td><td>GUI</td><td>Accredited</td><td>Yes</td><td>7AM–11PM</td><td><span class="box"></span></td><td></td></tr>
+  <tr><td>Baloc</td><td>BAL</td><td>Not acc.</td><td>No</td><td>8AM–5PM</td><td><span class="box"></span></td><td></td></tr>
+  <tr><td>Talavera</td><td>TAV</td><td>Accredited</td><td>No</td><td>8AM–5PM</td><td><span class="box"></span></td><td></td></tr>
+  <tr><td>Cabanatuan</td><td>CAB</td><td>Accredited</td><td>Yes</td><td>7AM–11PM</td><td><span class="box"></span></td><td></td></tr>
+  <tr><td>Palayan</td><td>PAL</td><td>Not acc.</td><td>No</td><td>8AM–5PM</td><td><span class="box"></span></td><td></td></tr>
+  <tr><td>Laur</td><td>LAU</td><td>Not acc.</td><td>No</td><td>8AM–5PM</td><td><span class="box"></span></td><td></td></tr>
+  <tr><td>Paniqui</td><td>PAN</td><td>Not acc.</td><td>No</td><td>8AM–5PM</td><td><span class="box"></span></td><td></td></tr>
+  <tr><td>Rizal</td><td>RIZ</td><td>Accredited</td><td>No</td><td>7AM–5PM</td><td><span class="box"></span></td><td></td></tr>
+  <tr><td>Talugtug</td><td>TLG</td><td>Not acc.</td><td>No</td><td>8AM–5PM</td><td><span class="box"></span></td><td></td></tr>
+  <tr><td>Gapan</td><td>GAP</td><td>Not acc.</td><td>No</td><td>8AM–5PM</td><td><span class="box"></span></td><td></td></tr>
+  <tr><td>Muñoz</td><td>MUN</td><td>Accredited</td><td>No</td><td>8AM–5PM</td><td><span class="box"></span></td><td></td></tr>
+</table>
+<div class="q"><p class="ask">May 12th branch ba, o 11 lang?</p><p class="choice"><span><span class="box"></span> 11 lang</span><span><span class="box"></span> May dagdag:</span></p><div class="blank"></div></div>
+<div class="q"><p class="ask">Address / contact sa system — kailangan i-update ngayon?</p><p class="choice"><span><span class="box"></span> Tama na</span><span><span class="box"></span> May corrections (isulat sa table)</span></p></div>
+
+<h2>11. System settings at out of scope</h2>
+<div class="q"><p class="ask">Notifications: due/missed, low stock, near expiry 60 days, referral status — in-app. Tama ba ang 4 na ito?</p><p class="choice"><span><span class="box"></span> Tama</span><span><span class="box"></span> Dagdag alert:</span></p><div class="blank"></div></div>
+<div class="q"><p class="ask">Theme (light/dark) puwedeng naka-save sa browser lang, hindi sa server. OK?</p><p class="choice"><span><span class="box"></span> OK</span><span><span class="box"></span> Dapat per-user sa server</span></p></div>
+<div class="q"><p class="ask">Confirm: wala sa Phase 1 — SMS, Bundy clock, government API, supplier module, full accounting/BIR, auto-submit DOH.</p><p class="choice"><span><span class="box"></span> OK, out of scope</span><span><span class="box"></span> Kailangan isama agad:</span></p><div class="blank"></div></div>
+<div class="q"><p class="ask">Deploy: HTTPS, clinic records sa PostgreSQL. Sino ang magho-host / magba-backup?</p><div class="blank"></div></div>
+<div class="q"><p class="ask">May iba pa ba sa araw-araw ninyo na wala sa sheet na ito?</p><div class="blank"></div><div class="blank"></div></div>
+
+<h2>Pirma</h2>
+<p class="small">Ang naka-check na <b>Tama</b> ay ituturing naming clinic-approved at ila-lock sa system. Ang <b>Mali / Palitan</b> ay hindi kokodigo hangga’t walang follow-up na pirma.</p>
+<div class="sign">
+  <div>
+    <div class="pad"><b>Clinic / doctor / authorized signatory</b><br/>Pangalan / position / petsa</div>
+  </div>
+  <div>
+    <div class="pad"><b>Project</b><br/>Pangalan / petsa</div>
+  </div>
+</div>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,385 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Branch {
+  name          String  @id
+  code          String  @unique
+  address       String
+  contact       String
+  hours         String
+  accreditation String
+  night         Boolean
+  main          Boolean @default(false)
+  morning       Boolean @default(true)
+  status        String  @default("Active")
+}
+
+model User {
+  id           String        @id @default(cuid())
+  name         String
+  email        String        @unique
+  passwordHash String
+  role         String
+  branchName   String?
+  status       String        @default("Active")
+  employeeId   String?
+  employee     Employee?     @relation(fields: [employeeId], references: [id])
+  sessions     Session[]
+  audits       AuditLog[]
+  attendance   Attendance[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  userAgent String   @default("")
+}
+
+model RegistryCounter {
+  branchName String
+  year       String
+  lastSeq    Int
+  @@id([branchName, year])
+}
+
+model Patient {
+  id                String      @id
+  first             String
+  middle            String      @default("")
+  last              String
+  suffix            String      @default("")
+  name              String
+  birthday          String
+  age               Int?
+  sex               String
+  contact           String      @default("")
+  address           String      @default("")
+  municipality      String      @default("")
+  municipalityOther String      @default("")
+  guardian          String      @default("")
+  senior            Boolean     @default(false)
+  pwd               Boolean     @default(false)
+  vetmed            Boolean     @default(false)
+  philhealth        Boolean     @default(false)
+  branch            String
+  classification    String      @default("Walk-in")
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  encounters        Encounter[]
+  notes             ProgressNote[]
+  @@index([last, first, middle, birthday])
+}
+
+model Encounter {
+  id                         String          @id
+  registry                   String          @unique
+  patientId                  String
+  patient                    Patient         @relation(fields: [patientId], references: [id])
+  branch                     String
+  date                       String
+  time                       String          @default("")
+  chief                      String          @default("")
+  animal                     String          @default("Dog")
+  animalOther                String          @default("")
+  biteType                   String          @default("Bite")
+  pet                        Boolean         @default(true)
+  vaccinated                 Boolean         @default(false)
+  stray                      Boolean         @default(false)
+  owned                      Boolean         @default(true)
+  owner                      String          @default("")
+  biteDate                   String          @default("")
+  biteTime                   String          @default("")
+  side                       String          @default("L")
+  site                       String          @default("")
+  place                      String          @default("")
+  washed                     Boolean         @default(true)
+  tandok                     Boolean         @default(false)
+  wound                      Json
+  category                   String          @default("")
+  booster                    Boolean         @default(false)
+  preExp                     Boolean         @default(false)
+  vaccine                    String          @default("PVRV")
+  brand                      String          @default("Bioshoot")
+  regimen                    String          @default("ID")
+  history                    Json
+  bp                         String          @default("")
+  weight                     String          @default("")
+  temp                       String          @default("")
+  consent                    Boolean         @default(false)
+  consentBy                  String          @default("")
+  tt                         Json
+  rig                        String          @default("")
+  erig                       Json
+  pepEligible                Boolean         @default(true)
+  stopAfter                  Int?
+  animalStatus               String          @default("Alive")
+  progress                   Json
+  doctor                     String          @default("")
+  remark                     String          @default("")
+  transferredTo              String          @default("")
+  died                       Boolean         @default(false)
+  rer                        Boolean         @default(false)
+  billing                    String          @default("")
+  past                       Boolean         @default(false)
+  seriesStartDate            String?
+  continuedFromEncounterId   String?
+  originRegistry             String          @default("")
+  referredFrom               String          @default("")
+  referredTo                 String          @default("")
+  receivingRegistry          String          @default("")
+  receivingEncounterId       String          @default("")
+  createdAt                  DateTime        @default(now())
+  updatedAt                  DateTime        @updatedAt
+  doses                      Dose[]
+  notes                      ProgressNote[]
+  payments                   Payment[]
+  referrals                  Referral[]
+}
+
+model Dose {
+  id           String    @id
+  encounterId  String
+  encounter    Encounter @relation(fields: [encounterId], references: [id], onDelete: Cascade)
+  day          String
+  date         String
+  time         String    @default("")
+  dose         String    @default("")
+  side         String    @default("")
+  brand        String    @default("")
+  batch        String    @default("")
+  route        String    @default("ID")
+  advised      String    @default("")
+  animalStatus String    @default("Alive")
+  vaccinator   String
+  branch       String
+  createdAt    DateTime  @default(now())
+  @@unique([encounterId, day])
+}
+
+model ProgressNote {
+  id          String     @id
+  patientId   String
+  patient     Patient    @relation(fields: [patientId], references: [id])
+  encounterId String
+  encounter   Encounter  @relation(fields: [encounterId], references: [id])
+  date        String
+  s           Json
+  animal      String     @default("Alive")
+  o           Json
+  a           Json
+  p           Json
+  staff       String
+  branch      String
+  createdAt   DateTime   @default(now())
+}
+
+model Payment {
+  id             String     @id
+  registry       String
+  encounterId    String
+  encounter      Encounter  @relation(fields: [encounterId], references: [id])
+  patient        String
+  branch         String
+  date           String
+  service        String
+  classification String
+  amount         Float      @default(0)
+  method         String     @default("—")
+  reference      String     @default("—")
+  status         String
+  remarks        String     @default("")
+  createdAt      DateTime   @default(now())
+}
+
+model Referral {
+  id                    String     @id
+  patient               String
+  patientId             String
+  encounterId           String
+  encounter             Encounter  @relation(fields: [encounterId], references: [id])
+  registry              String
+  originRegistry        String     @default("")
+  receivingRegistry     String     @default("")
+  receivingEncounterId  String     @default("")
+  from                  String
+  to                    String
+  date                  String
+  reason                String     @default("")
+  treatment             String     @default("")
+  next                  String     @default("")
+  classification        String     @default("PhilHealth")
+  status                String
+  remarks               String     @default("")
+  createdAt             DateTime   @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  userName  String
+  module    String
+  action    String
+  record    String   @default("—")
+  oldValue  String   @default("—")
+  newValue  String   @default("Saved")
+  time      String
+  branch    String
+  device    String   @default("")
+  createdAt DateTime @default(now())
+}
+
+model InventoryLine {
+  id          String @id
+  item        String
+  type        String
+  branch      String
+  batch       String
+  expiry      String
+  stock       Int
+  begin       Int
+  received    Int    @default(0)
+  used        Int    @default(0)
+  uses        Int    @default(0)
+  usesPerVial Int    @default(0)
+  date        String
+  shift       String @default("MS")
+  unit        String @default("vials")
+  threshold   Int    @default(0)
+  @@index([branch, item])
+}
+
+model LedgerRow {
+  id        String @id
+  stockId   String
+  item      String
+  branch    String
+  date      String
+  shift     String
+  begin     Int
+  received  Int    @default(0)
+  batch     String @default("")
+  used      Int    @default(0)
+  stock     Int
+  remarks   String @default("")
+  signature String @default("")
+  @@index([branch, item, date])
+}
+
+model ReceivedRow {
+  id        String @id
+  date      String
+  shift     String @default("MS")
+  item      String
+  branch    String
+  batch     String
+  expiry    String
+  received  Int
+  remaining Int
+  total     Int
+  @@index([branch, date])
+}
+
+model Movement {
+  id     String @id
+  date   String
+  time   String @default("")
+  by     String @default("")
+  shift  String @default("MS")
+  item   String
+  branch String
+  type   String
+  qty    Int
+  uses   Int    @default(0)
+  batch  String @default("")
+  ref    String @default("")
+  reason String @default("")
+  @@index([branch, date])
+}
+
+model FinanceEntry {
+  id          String @id
+  date        String
+  branch      String
+  type        String
+  category    String
+  description String
+  amount      Float
+  reference   String @default("")
+  remarks     String @default("")
+  by          String @default("")
+  @@index([branch, date])
+}
+
+model Refund {
+  id          String @id
+  patient     String
+  payment     String
+  branch      String
+  amount      Float
+  reason      String @default("")
+  requested   String
+  approvedBy  String @default("—")
+  processedBy String @default("—")
+  refunded    String @default("—")
+  status      String
+  @@index([branch, status])
+}
+
+model Employee {
+  id      String @id
+  name    String
+  branch  String
+  position String
+  role    String
+  rate    Float
+  hours   Int     @default(8)
+  shift   String  @default("Morning Shift")
+  status  String  @default("Active")
+  officer Boolean @default(false)
+  payroll Boolean @default(true)
+  users   User[]
+}
+
+model Attendance {
+  id        String  @id
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date      String
+  clockIn   String  @default("")
+  clockOut  String  @default("")
+  source    String  @default("Time In button")
+  branch    String
+  device    String  @default("Branch workstation")
+  corrected Boolean @default(false)
+  @@unique([userId, date])
+}
+
+model PayrollInput {
+  id          String   @id @default(cuid())
+  employeeId  String
+  periodId    String
+  days        Float
+  late        Float
+  undertime   Float
+  night       Float
+  ot          Float    @default(0)
+  otApproved  Boolean  @default(false)
+  holiday     Float    @default(0)
+  holidayType String   @default("Regular")
+  other       Float    @default(0)
+  reason      String
+  by          String
+  updatedAt   DateTime @updatedAt
+  @@unique([employeeId, periodId])
+}
