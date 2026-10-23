@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { prisma } from '../prisma.js'
 import { audit } from '../audit.js'
 import { canAccessBranch, hashPassword, requireAny, requireAuth, requirePage, type AuthedUser } from '../auth.js'
-import { ALL_BRANCH_ROLES, TODAY, addDays, canPage } from '../clinical.js'
+import { ALL_BRANCH_ROLES, addDays, canPage, clinicDate } from '../clinical.js'
 import { nextId } from '../ids.js'
 import { ADJUST_REASONS, ITEM_NAMES, itemMeta } from '../inventory.js'
 import {
@@ -14,9 +14,9 @@ import {
 export const opsRouter = Router()
 opsRouter.use(requireAuth)
 
-const ROLES = ['Admin', 'HR', 'Nurse / Staff', 'PO / PhilHealth Officer', 'Secretary', 'Cashier', 'Employee'] as const
+const ROLES = ['Admin', 'Nurse / Staff', 'PO / PhilHealth Officer', 'Secretary'] as const
 const NO_CLOCK_ROLES = ['Admin']
-const STAFF_ROLES = ['HR', 'Nurse / Staff', 'PO / PhilHealth Officer', 'Secretary', 'Cashier', 'Employee'] as const
+const STAFF_ROLES = ['Nurse / Staff', 'PO / PhilHealth Officer', 'Secretary'] as const
 const FINANCE_CATS: Record<string, string[]> = {
   Income: ['Other income', 'PhilHealth reimbursement', 'Miscellaneous income'],
   Expense: ['Utilities', 'Rent', 'Medical supplies', 'Transportation', 'Repairs & maintenance', 'Office supplies', 'Miscellaneous']
@@ -50,7 +50,7 @@ export async function workspaceExtras(user: AuthedUser) {
   const canEmp = ['employees', 'payroll', 'payslips', 'users'].some(p => canPage(user.role, p))
   const canUsers = canPage(user.role, 'users')
   const canPay = canPage(user.role, 'payments')
-  const payrollAdmin = ['Admin', 'HR'].includes(user.role)
+  const payrollAdmin = user.role === 'Admin'
   const [branches, inventory, ledger, received, movements, finance, refunds, employees, attendance, users, payrollInputs] = await Promise.all([
     prisma.branch.findMany({ orderBy: { name: 'asc' } }),
     canInv ? prisma.inventoryLine.findMany() : Promise.resolve([]),
@@ -79,14 +79,10 @@ export async function workspaceExtras(user: AuthedUser) {
     movements: movements.filter(x => inBranch(x.branch)).map(movementClient),
     finance: finance.filter(x => inBranch(x.branch)).map(financeClient),
     refunds: refunds.filter(x => inBranch(x.branch)).map(refundClient),
-    employees: (user.role === 'Employee'
-      ? employees.filter(e => e.id === user.employeeId)
-      : employees.filter(e => inBranch(e.branch))).map(employeeClient),
+    employees: employees.filter(e => inBranch(e.branch)).map(employeeClient),
     attendance: attendance.map(attendanceClient),
     users: users.map(userClient),
-    payrollInputs: (user.role === 'Employee'
-      ? payrollInputs.filter(p => p.employeeId === user.employeeId)
-      : payrollInputs).map(payrollInputClient)
+    payrollInputs: payrollInputs.map(payrollInputClient)
   }
 }
 
@@ -203,7 +199,8 @@ opsRouter.post('/inventory/stock-out', requireAny('usage', 'stock'), async (req,
   const form = parsed.data
   if (!scopeBranch(req.user!, form.branch)) return deny(res, 'Hindi ito ang branch mo')
   const existing = await prisma.inventoryLine.findMany({ where: { item: form.item, branch: form.branch } })
-  const line = existing.find(x => x.id === form.line) || existing[0]
+  const fifo = existing.filter(x => x.stock > 0 && x.expiry >= clinicDate()).sort((a, b) => a.expiry.localeCompare(b.expiry))
+  const line = existing.find(x => x.id === form.line) || fifo[0] || existing[0]
   if (!line) return deny(res, 'No stock line for this item at ' + form.branch, 400)
   if (form.quantity > line.stock) return deny(res, 'Insufficient stock on hand (' + line.stock + ')', 409)
   const result = await prisma.$transaction(async tx => {
@@ -462,7 +459,7 @@ opsRouter.post('/refunds', requirePage('refunds'), async (req, res) => {
       branch: pay.branch,
       amount: parsed.data.amount,
       reason: parsed.data.reason,
-      requested: parsed.data.requested || TODAY,
+      requested: parsed.data.requested || clinicDate(),
       status: 'Pending'
     }
   })
@@ -491,7 +488,7 @@ opsRouter.post('/refunds/:id/status', requirePage('refunds'), async (req, res) =
       status,
       approvedBy: ['Approved', 'Rejected'].includes(status) ? req.user!.name : row.approvedBy,
       processedBy: status === 'Refunded' ? req.user!.name : row.processedBy,
-      refunded: status === 'Refunded' ? TODAY : row.refunded
+      refunded: status === 'Refunded' ? clinicDate() : row.refunded
     }
   })
   await audit(req, { module: 'Refund', action: 'Refund ' + status.toLowerCase(), record: row.id, branch: row.branch, oldValue: row.status, newValue: status })
@@ -624,7 +621,7 @@ opsRouter.patch('/branches/:name', requirePage('branches'), async (req, res) => 
 opsRouter.post('/attendance/in', requirePage('attendance'), async (req, res) => {
   const user = req.user!
   if (NO_CLOCK_ROLES.includes(user.role)) return deny(res, 'Admin does not Time In')
-  const existing = await prisma.attendance.findUnique({ where: { userId_date: { userId: user.id, date: TODAY } } })
+  const existing = await prisma.attendance.findUnique({ where: { userId_date: { userId: user.id, date: clinicDate() } } })
   if (existing?.clockIn) return deny(res, 'Time In already recorded', 409)
   const where = String(req.body.branch || (user.allBranches ? 'Guimba' : user.branchName) || 'Guimba')
   if (!user.allBranches && where !== user.branchName) return deny(res, 'Hindi ito ang branch mo')
@@ -636,7 +633,7 @@ opsRouter.post('/attendance/in', requirePage('attendance'), async (req, res) => 
       data: {
         id: await nextId(prisma.attendance, 'ATT-', 4),
         userId: user.id,
-        date: TODAY,
+        date: clinicDate(),
         clockIn: at,
         clockOut: '',
         source: 'Time In button',
@@ -651,7 +648,7 @@ opsRouter.post('/attendance/in', requirePage('attendance'), async (req, res) => 
 opsRouter.post('/attendance/out', requirePage('attendance'), async (req, res) => {
   const user = req.user!
   if (NO_CLOCK_ROLES.includes(user.role)) return deny(res, 'Admin does not Time Out')
-  const existing = await prisma.attendance.findUnique({ where: { userId_date: { userId: user.id, date: TODAY } } })
+  const existing = await prisma.attendance.findUnique({ where: { userId_date: { userId: user.id, date: clinicDate() } } })
   if (!existing?.clockIn) return deny(res, 'Time In first', 409)
   if (existing.clockOut) return deny(res, 'Time Out already recorded', 409)
   const at = clock()
@@ -669,7 +666,7 @@ const correctSchema = z.object({
 })
 
 opsRouter.post('/attendance/correct', requireAny('attendance'), async (req, res) => {
-  if (!['Admin', 'HR'].includes(req.user!.role)) return deny(res, 'Walang access ang role na ito sa module na ito')
+  if (req.user!.role !== 'Admin') return deny(res, 'Walang access ang role na ito sa module na ito')
   const parsed = correctSchema.safeParse(req.body)
   if (!parsed.success) return deny(res, 'Updated value and reason are required', 400)
   const targetId = parsed.data.userId || req.user!.id
@@ -731,7 +728,7 @@ const payrollInputSchema = z.object({
 })
 
 opsRouter.post('/payroll/inputs', requirePage('payroll'), async (req, res) => {
-  if (!['Admin', 'HR'].includes(req.user!.role)) return deny(res, 'Walang access ang role na ito sa module na ito')
+  if (req.user!.role !== 'Admin') return deny(res, 'Walang access ang role na ito sa module na ito')
   const parsed = payrollInputSchema.safeParse(req.body)
   if (!parsed.success) return deny(res, parsed.error.issues[0]?.message || 'Reason is required to update payroll', 400)
   const form = parsed.data
@@ -748,7 +745,7 @@ opsRouter.post('/payroll/inputs', requirePage('payroll'), async (req, res) => {
 })
 
 opsRouter.delete('/payroll/inputs/:employeeId/:periodId', requirePage('payroll'), async (req, res) => {
-  if (!['Admin', 'HR'].includes(req.user!.role)) return deny(res, 'Walang access ang role na ito sa module na ito')
+  if (req.user!.role !== 'Admin') return deny(res, 'Walang access ang role na ito sa module na ito')
   const employeeId = String(req.params.employeeId)
   const periodId = String(req.params.periodId)
   const existing = await prisma.payrollInput.findUnique({ where: { employeeId_periodId: { employeeId, periodId } } })

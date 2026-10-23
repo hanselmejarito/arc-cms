@@ -69,7 +69,7 @@ h1,h2,h3,strong,b,.form-section-title,.stat-value{color:#e6ebf2}.hero-banner h2,
 @media screen{:root[data-theme=dark]{.timein-prompt{background:rgb(255 204 0 / 10%);border-color:rgb(255 204 0 / 40%)}.timein-prompt strong{color:#ffd84d}.timein-prompt p,.timein-later{color:#c9b97a}}}
 @media(max-width:760px){.timein-prompt{flex-wrap:wrap}.check-grid.four,.form-grid.three,.rer-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.rer-cols{grid-template-columns:1fr}.encounter-picker{flex-basis:100%}}
 @media print{
-@page{size:A4 portrait;margin:8mm}
+@page{size:A4 portrait;margin:6mm}
 html,body{background:#fff!important}
 .sidebar,.topbar,.app-footer,.back-link,.profile-hero,.profile-content>.tabs,.section-title,.section-actions,.timein-prompt,.toast,.picker-card,.doh-checks,.reports-filter,.period-filter,.export-actions,.no-print,.mobile-scrim{display:none!important}
 .form-sheet{border:0;padding:0}
@@ -125,6 +125,34 @@ html.print-rer .arc-id{min-height:20mm}
 html.print-rer .arc-main{min-height:78mm}
 html.print-rer .arc-lower{min-height:125mm}
 html.print-rer .arc-form,html.print-rer .arc-form *{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+html.print-admission,html.print-admission body{height:auto!important;overflow:visible!important;background:#fff!important}
+html.print-admission .app,html.print-admission .toast{display:none!important}
+html.print-admission .admission-print-host{display:block!important;width:194mm;max-width:194mm;margin:0 auto;background:#fff;color:#111;overflow:visible}
+html.print-admission .admission-print-host .arc-form{break-after:page;page-break-after:always;break-inside:avoid;page-break-inside:avoid}
+html.print-admission .admission-page{min-height:0}
+html.print-admission .admission-back{break-before:auto;page-break-before:auto;break-after:avoid;page-break-after:avoid;width:194mm;max-width:194mm;height:277mm;max-height:277mm;overflow:visible;padding:0}
+html.print-admission .soap-paper{width:194mm;max-width:194mm;height:277mm;max-height:277mm;min-height:0;margin:0;border:2.2px solid #1f6f86;outline:2.2px solid #1f6f86;outline-offset:-2.2px;padding:2.2mm;background:#fff;color:#111;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden;font-family:Arial,Helvetica,sans-serif;font-size:8.5pt;line-height:1.25;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}
+html.print-admission .soap-paper-head{flex:none;background:#d45c8a;color:#fff;text-align:center;padding:2mm 0;margin:0}
+html.print-admission .soap-paper-head h2{margin:0;font:900 13pt/1 "Arial Black",Arial,Helvetica,sans-serif;letter-spacing:.12em}
+html.print-admission .soap-paper-block{flex:1 1 0;min-height:0;display:grid;grid-template-columns:36mm 8mm 1fr;grid-template-rows:auto auto auto 1fr;grid-template-areas:"date ls s" "sign lo o" "sign la a" "sign lp p";column-gap:2mm;row-gap:.6mm;align-items:start;border-top:1.4px solid #1f6f86;padding:1.8mm 1.2mm 1.2mm;overflow:hidden}
+html.print-admission .soap-paper-block:first-of-type{border-top:0}
+html.print-admission .soap-paper-date{grid-area:date;font-size:8.5pt;font-weight:800;font-family:Arial,Helvetica,sans-serif;align-self:start;padding-top:.4mm}
+html.print-admission .soap-paper-date u{min-width:24mm}
+html.print-admission .soap-paper-sign{grid-area:sign;border:1.4px solid #222;min-height:0;height:auto;align-self:stretch;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;padding:1.5mm 1mm 1.2mm;text-align:center}
+html.print-admission .soap-paper-sign em{font-style:normal;font-weight:700;font-size:8.5pt;font-family:Arial,Helvetica,sans-serif;min-height:0;flex:1;display:flex;align-items:center;justify-content:center}
+html.print-admission .soap-paper-sign span{font-size:7.5pt;font-weight:800;font-family:Arial,Helvetica,sans-serif;letter-spacing:.03em;margin-top:1mm}
+html.print-admission .soap-l{font-size:14pt;line-height:1;color:#1f6f86;padding-top:.2mm;font-family:Arial,Helvetica,sans-serif}
+html.print-admission .soap-l-s{grid-area:ls}html.print-admission .soap-l-o{grid-area:lo}html.print-admission .soap-l-a{grid-area:la}html.print-admission .soap-l-p{grid-area:lp}
+html.print-admission .soap-paper-s{grid-area:s;display:grid;grid-template-columns:1.05fr 1fr;gap:.8mm 5mm;font-size:8.5pt;line-height:1.25}
+html.print-admission .soap-paper-o{grid-area:o;display:grid;grid-template-columns:1.25fr .95fr .9fr;gap:.8mm 3.5mm;font-size:8.5pt;line-height:1.25}
+html.print-admission .soap-paper-a{grid-area:a;display:grid;grid-template-columns:1.5fr 1fr;gap:.8mm 3.5mm;font-size:8.5pt;line-height:1.25}
+html.print-admission .soap-paper-p{grid-area:p;display:grid;grid-template-columns:1.35fr 1fr;gap:.8mm 3.5mm;font-size:8.5pt;line-height:1.25}
+html.print-admission .soap-paper-animal strong{display:block;font-size:8.5pt;margin-bottom:.4mm;font-family:Arial,Helvetica,sans-serif}
+html.print-admission .soap-paper-animal-grid{display:grid;grid-template-columns:max-content max-content;column-gap:4mm;row-gap:.15mm}
+html.print-admission .soap-paper-col{display:flex;flex-direction:column;gap:.1mm}
+html.print-admission .soap-paper label{display:flex;align-items:center;flex-wrap:nowrap;gap:3px;font-size:8.5pt;line-height:1.28;white-space:nowrap;font-family:Arial,Helvetica,sans-serif}
+html.print-admission .soap-paper u{min-width:10mm;min-height:0;border-bottom:1px solid #333;text-decoration:none;display:inline-block;padding:0 2px}
+html.print-admission .soap-paper .arc-box{width:11px;height:11px}
 }
 @media screen{:root[data-theme=dark]{.choice-group button,.dose-card,.rer-sheet,.cell-input{background:#172238;border-color:#22304a;color:#a9b4c4}.choice-group button.active{background:rgb(255 204 0 / 14%);border-color:rgb(255 204 0 / 45%);color:#ffd84d}.dose-card.done{background:rgb(21 128 61 / 12%);border-color:rgb(21 128 61 / 35%)}.form-table th,.form-table td{border-color:#22304a}.form-table th,.form-table tfoot td,.form-table th.sticky,.form-table tfoot .sticky{background:#172238;color:#a9b4c4}.form-table td{color:#c0c9d6}.form-table .sticky{background:#111a2b}.form-table td.auto{background:rgb(21 128 61 / 14%)}.soap-block,.rer-foot{border-color:#22304a}.soap-block>span{background:rgb(255 204 0 / 14%);color:#ffd84d}.sheet-head strong,.rer-head strong{color:#e6ebf2}.sheet-head span,.sheet-head small,.sheet-reminder,.sheet-legend,.rer-head span,.rer-cols p,.rer-foot,.dose-card p,.choice-field>span,.picker-summary strong,.rer-grid b{color:#a9b4c4}.picker-summary small,.rer-grid small,.block-sub,.period-filter label,.dose-card-head small{color:#7d8aa0}.doh-checks .ok{background:rgb(21 128 61 / 22%);color:#4ade80}.doh-checks .bad{background:rgb(211 47 47 / 20%);color:#ff8a80}}}
 @media screen and (max-width:760px){:root[data-theme=dark] .sidebar-context:not(.locked):hover{background:rgb(255 204 0 / 8%);border-color:rgb(255 204 0 / 30%)}}
@@ -236,6 +264,32 @@ html.print-rer .arc-form,html.print-rer .arc-form *{-webkit-print-color-adjust:e
 .arc-form .body-marker circle:first-child{fill:rgb(166 90 96 / 18%);stroke:var(--rer-red);stroke-width:3}
 .arc-form .body-marker circle:last-child{fill:var(--rer-red)}
 @media screen and (max-width:900px){.arc-main,.arc-lower,.arc-dose{grid-template-columns:1fr}.arc-center{border:0;padding:0}.arc-bodies svg{height:180px}.arc-dose-body .arc-lr{position:static}}
-@media screen{.rer-print-only{display:none!important}}
+@media screen{.rer-print-only,.admission-print-only{display:none!important}}
+.admission-sheet{background:#fff;color:#111}
+.admission-page{padding:8mm}
+.admission-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;margin-top:8px}
+.admission-grid .full{grid-column:1/-1}
+.admission-grid small{display:block;color:#555;font-size:11px}
+.admission-back{page-break-before:always}
+.soap-paper{border:2px solid #1f6f86;background:#fff;color:#111;padding:10px}
+.soap-paper-head{background:#d45c8a;color:#fff;text-align:center;padding:8px 0;margin-bottom:8px}
+.soap-paper-head h2{margin:0;font:900 18px/1 "Arial Black",Arial,Helvetica,sans-serif;letter-spacing:.12em}
+.soap-paper-block{display:grid;grid-template-columns:140px 28px 1fr;grid-template-areas:"date ls s" "sign lo o" "sign la a" "sign lp p";gap:8px 10px;border-top:1.5px solid #1f6f86;padding:10px 4px}
+.soap-paper-block:first-of-type{border-top:0;padding-top:0}
+.soap-paper-date{grid-area:date;font-size:13px;font-weight:800}
+.soap-paper-sign{grid-area:sign;border:1.5px solid #222;min-height:92px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;padding:8px 6px 6px;text-align:center}
+.soap-paper-sign em{font-style:normal;font-weight:700;min-height:42px;display:flex;align-items:flex-end}
+.soap-paper-sign span{font-size:11px;font-weight:800;letter-spacing:.04em;margin-top:4px}
+.soap-l{font-size:22px;line-height:1;color:#1f6f86}
+.soap-l-s{grid-area:ls}.soap-l-o{grid-area:lo}.soap-l-a{grid-area:la}.soap-l-p{grid-area:lp}
+.soap-paper-s{grid-area:s}.soap-paper-o{grid-area:o}.soap-paper-a{grid-area:a}.soap-paper-p{grid-area:p}
+.soap-paper-s,.soap-paper-o,.soap-paper-a,.soap-paper-p{display:grid;grid-template-columns:1.15fr 1fr;gap:6px 16px;font-size:12px}
+.soap-paper-o{grid-template-columns:1.2fr .9fr .9fr}
+.soap-paper-a{grid-template-columns:1.4fr 1fr}
+.soap-paper-animal strong{display:block;font-size:12px;margin-bottom:4px}
+.soap-paper-animal-grid{display:grid;grid-template-columns:1fr 1fr;column-gap:12px}
+.soap-paper-col{display:flex;flex-direction:column;gap:2px}
+.soap-paper label{display:flex;align-items:center;gap:4px;white-space:nowrap}
+.soap-paper u{min-width:48px;min-height:1em;border-bottom:1px solid #333;text-decoration:none;display:inline-block;padding:0 3px}
 @media screen{:root[data-theme=dark] .arc-form,:root[data-theme=dark] .rer-sheet.arc-form{background:#fff;color:#1a1a1a;border-color:#c8c8c8}:root[data-theme=dark] .arc-form h1,:root[data-theme=dark] .arc-form h3,:root[data-theme=dark] .arc-form b,:root[data-theme=dark] .arc-form strong{color:#111}:root[data-theme=dark] .arc-form .arc-right b{color:var(--rer-gold)}:root[data-theme=dark] .arc-form .arc-dose-body strong{color:var(--rer-blue)}:root[data-theme=dark] .arc-form .arc-id-line b.arc-muted{color:#8a8a8a}}
 @media screen{:root[data-theme=dark] .arc-form .arc-name-registry b{color:var(--rer-blue)}}

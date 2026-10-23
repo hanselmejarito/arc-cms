@@ -1,6 +1,6 @@
 import type { Encounter, Payment, PrismaClient } from '@prisma/client'
 import { servicingBranch } from './auth.js'
-import { DAY_LABEL, NURSE_ROLE, protocolOf, seriesStart, visitNeedsPay, visitPaid } from './clinical.js'
+import { DAY_LABEL, NURSE_ROLE, protocolOf, visitNeedsPay, visitPaid } from './clinical.js'
 import { nextId } from './ids.js'
 import { applyConsume, doseUses } from './inventory.js'
 
@@ -37,7 +37,6 @@ export function day0DoseOf(enc: Pick<Encounter, 'regimen'>) {
 export function autoDay0Skip(enc: Encounter, pays: Payment[]) {
   if (!enc.rer || enc.died || enc.remark === 'Transferred') return 'no-pep'
   if (enc.continuedFromEncounterId) return 'receiving'
-  if (enc.billing === 'For PhilHealth') return 'refer'
   if (!enc.preExp && (enc.category === 'I' || !enc.pepEligible)) return 'no-pep'
   if (visitNeedsPay(enc.billing) && !visitPaid(pays, enc.id)) return 'pay'
   return ''
@@ -50,7 +49,7 @@ export async function createDoseInTx(tx: Tx, enc: Encounter, input: DoseInput, b
   const next = protocol.days[k + 1]
   const servicing = servicingBranch(enc)
   const uses = doseUses(input.dose, enc.vaccine)
-  const consumed = await applyConsume(tx, enc.brand, servicing, uses)
+  const consumed = await applyConsume(tx, enc.brand, servicing, uses, input.batch || undefined)
   if ('error' in consumed) throw new Error(consumed.error)
   const created = await tx.dose.create({
     data: {
@@ -64,7 +63,7 @@ export async function createDoseInTx(tx: Tx, enc: Encounter, input: DoseInput, b
       brand: enc.brand,
       batch: input.batch || consumed.line.batch,
       route: input.dose.includes('IM') ? 'IM' : 'ID',
-      advised: next ? (DAY_LABEL[next[0]] || next[0]) + ' · ' + addDaysUtc(seriesStart(enc), next[1]) : 'Series complete',
+      advised: next ? (DAY_LABEL[next[0]] || next[0]) + ' · ' + addDaysUtc(input.date, next[1] - protocol.days[k][1]) : 'Series complete',
       animalStatus: input.animalStatus,
       vaccinator: input.vaccinator,
       branch: servicing

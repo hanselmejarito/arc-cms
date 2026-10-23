@@ -47,19 +47,129 @@ function DoseBlock({row,g}){
  </div>
 }
 
-export function printRer(){
- const sheet=document.querySelector('.rer-print-only .arc-form')||document.querySelector('.arc-form')
- if(!sheet)return
+export function printAdmission(){
+ const packet=document.querySelector('.admission-print-only .admission-sheet')||document.querySelector('.admission-sheet')
+ const form=document.querySelector('.rer-print-only .arc-form')||document.querySelector('.arc-form')
+ if(!packet&&!form)return
  const host=document.createElement('div')
- host.className='rer-print-host'
- host.appendChild(sheet.cloneNode(true))
+ host.className='rer-print-host admission-print-host'
+ host.appendChild((packet||form).cloneNode(true))
  document.body.appendChild(host)
  const root=document.documentElement
- root.classList.add('print-rer')
- const clear=()=>{root.classList.remove('print-rer');host.remove();window.removeEventListener('afterprint',clear)}
+ root.classList.add('print-admission','print-rer')
+ const clear=()=>{root.classList.remove('print-admission','print-rer');host.remove();window.removeEventListener('afterprint',clear)}
  window.addEventListener('afterprint',clear)
  window.setTimeout(clear,120000)
  window.setTimeout(()=>window.print(),40)
+}
+export const printRer=printAdmission
+
+const animalMark=(n,key)=>{
+ const a=String(n?.animal||'').toLowerCase().replace(/\s+/g,' ')
+ if(key==='alive')return a==='alive'
+ if(key==='stray')return a.includes('stray')||a.includes('unknown')
+ if(key==='weak')return a==='weak'
+ if(key==='dead')return a==='dead'
+ if(key==='missing')return a==='missing'||a.includes('lost')
+ if(key==='behavior')return a.includes('behavior')||a.includes('behaviour')
+ return false
+}
+
+const soapNum=v=>String(v||'').replace(/^Day\s+/i,'')
+
+function SoapPaperBlock({n}){
+ const s=n?.s||{},o=n?.o||{},a=n?.a||{},p=n?.p||{}
+ return <div className="soap-paper-block">
+  <div className="soap-paper-date">DATE: <u>{n?slash(n.date,true):''}</u></div>
+  <b className="soap-l soap-l-s">S</b>
+  <div className="soap-paper-s">
+   <div className="soap-paper-col">
+    <label><Box on={!!s.fever}/> fever</label>
+    <label><Box on={!!s.rashes}/> rashes</label>
+    <label><Box on={!!s.numbness}/> numbness at the wound site</label>
+    <label><Box on={!!s.headaches}/> headaches</label>
+    <label><Box on={!!s.others}/> others <u>{s.others||''}</u></label>
+   </div>
+   <div className="soap-paper-animal">
+    <strong>status of biting animal</strong>
+    <div className="soap-paper-animal-grid">
+     <label><Box on={animalMark(n,'alive')}/> alive</label>
+     <label><Box on={animalMark(n,'stray')}/> unknown / stray</label>
+     <label><Box on={animalMark(n,'weak')}/> weak</label>
+     <label><Box on={animalMark(n,'dead')}/> DEAD</label>
+     <label><Box on={animalMark(n,'missing')}/> missing</label>
+     <label><Box on={animalMark(n,'behavior')}/> change in behavior</label>
+    </div>
+   </div>
+  </div>
+  <div className="soap-paper-sign">
+   <em>{n?.staff||''}</em>
+   <span>NAME & SIGNATURE</span>
+  </div>
+  <b className="soap-l soap-l-o">O</b>
+  <div className="soap-paper-o">
+   <div className="soap-paper-col">
+    <label><Box on={!!o.temp}/> body temperature <u>{o.temp||''}</u></label>
+    <label><Box on={!!o.bp||!!o.hr}/> BP <u>{o.bp||''}</u> / HR <u>{o.hr||''}</u></label>
+    <label><Box on={!!o.weakness}/> general weakness</label>
+   </div>
+   <div className="soap-paper-col">
+    <label><Box on={!!o.hydrophobia}/> hydrophobia</label>
+    <label><Box on={!!o.aerophobia}/> aerophobia</label>
+    <label><Box on={!!o.photophobia}/> photophobia</label>
+   </div>
+   <div className="soap-paper-col">
+    <label><Box on={!!o.rashes}/> rashes</label>
+    <label><Box on={!!o.others}/> others <u>{o.others||''}</u></label>
+   </div>
+  </div>
+  <b className="soap-l soap-l-a">A</b>
+  <div className="soap-paper-a">
+   <div className="soap-paper-col">
+    <label><Box on={!!a.spBite}/> s/p animal bite</label>
+    <label><Box on={!!a.healed}/> healed wound secondary to animal bite</label>
+   </div>
+   <label><Box on={!!a.others}/> others <u>{a.others||''}</u></label>
+  </div>
+  <b className="soap-l soap-l-p">P</b>
+  <div className="soap-paper-p">
+   <div className="soap-paper-col">
+    <label><Box on={!!p.day}/> give day <u>{soapNum(p.day)}</u> of anti rabies vaccine</label>
+    <label><Box on={!!p.erig}/> give ERIG</label>
+    <label><Box on={!!p.returnDay}/> to come back on DAY <u>{soapNum(p.returnDay)}</u></label>
+   </div>
+   <div className="soap-paper-col">
+    <label><Box on={!!p.observe}/> cont. observation of biting animal</label>
+    <label><Box on={!!p.others}/> others <u>{p.others||''}</u></label>
+   </div>
+  </div>
+ </div>
+}
+
+function soapPages(notes){
+ const rows=notes.length?notes:[null]
+ const pages=[]
+ for(let i=0;i<rows.length;i+=4){
+  const slice=rows.slice(i,i+4)
+  while(slice.length<4)slice.push(null)
+  pages.push(slice)
+ }
+ return pages
+}
+
+export function AdmissionSheet({e,p,notes=[],doses=[]}){
+ const visitNotes=(notes||[]).filter(n=>!n.encounterId||n.encounterId===e.id)
+ return <div className="admission-sheet">
+  <RerSheet e={e} p={p} doses={doses}/>
+  {soapPages(visitNotes).map((page,i)=>
+   <section className="admission-page admission-back" key={i}>
+    <div className="soap-paper">
+     <header className="soap-paper-head"><h2>PROGRESS NOTES</h2></header>
+     {page.map((n,k)=><SoapPaperBlock key={(n&&n.id)||('blank-'+k)} n={n}/>)}
+    </div>
+   </section>
+  )}
+ </div>
 }
 
 function paperPlace(br){

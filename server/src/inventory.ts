@@ -1,5 +1,5 @@
 import type { InventoryLine, PrismaClient } from '@prisma/client'
-import { TODAY } from './clinical.js'
+import { clinicDate } from './clinical.js'
 
 export const ITEM_MASTER = [
   { item: 'ChiroRab', type: 'Anti-rabies vaccine · PCEC', unit: 'vials', usesPerVial: 10, threshold: 30 },
@@ -34,7 +34,7 @@ export function doseUses(dose: string, vaccine: string) {
 
 export function consumeLine(line: InventoryLine | null, uses = 1): { error: string } | { line: InventoryLine; vials: number; rest: number; uses: number } {
   if (!line) return { error: 'No usable stock' }
-  if (line.expiry < TODAY || line.stock <= 0) return { error: 'No usable ' + line.item + ' stock at ' + line.branch }
+  if (line.expiry < clinicDate() || line.stock <= 0) return { error: 'No usable ' + line.item + ' stock at ' + line.branch }
   const capacity = line.usesPerVial || 0
   const total = capacity ? (line.uses || 0) + uses : 1
   const vials = capacity ? Math.floor(total / capacity) : 1
@@ -43,16 +43,16 @@ export function consumeLine(line: InventoryLine | null, uses = 1): { error: stri
   return { line, vials, rest, uses }
 }
 
-export async function fifoLine(tx: Tx, item: string, branch: string) {
+export async function fifoLine(tx: Tx, item: string, branch: string, batch?: string) {
   const rows = await tx.inventoryLine.findMany({
-    where: { item, branch, stock: { gt: 0 }, expiry: { gte: TODAY } }
+    where: { item, branch, stock: { gt: 0 }, expiry: { gte: clinicDate() }, ...(batch ? { batch } : {}) }
   })
   return rows.sort((a, b) => a.expiry.localeCompare(b.expiry))[0] || null
 }
 
-export async function applyConsume(tx: Tx, item: string, branch: string, uses = 1) {
-  const line = await fifoLine(tx, item, branch)
-  if (!line) return { error: 'No usable ' + item + ' stock at ' + branch } as const
+export async function applyConsume(tx: Tx, item: string, branch: string, uses = 1, batch?: string) {
+  const line = await fifoLine(tx, item, branch, batch)
+  if (!line) return { error: batch ? 'No usable ' + item + ' batch ' + batch + ' at ' + branch : 'No usable ' + item + ' stock at ' + branch } as const
   const result = consumeLine(line, uses)
   if ('error' in result) return result
   const updated = await tx.inventoryLine.update({

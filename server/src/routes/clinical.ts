@@ -5,11 +5,11 @@ import { prisma } from '../prisma.js'
 import { audit, publicAudit } from '../audit.js'
 import { canAccessBranch, requireAuth, requirePage, servicingBranch, type AuthedUser } from '../auth.js'
 import {
-  ALL_BRANCH_ROLES, HIGH_RISK_SITES, NURSE_ROLE, TODAY, ageFrom, blankErig, blankHistory,
-  blankProgress, blankTt, canPage, caseInfo, fullName, protocolOf, samePerson, statusOf,
+  ALL_BRANCH_ROLES, HIGH_RISK_SITES, NURSE_ROLE, ageFrom, blankErig, blankHistory, clinicDate,
+  blankProgress, blankTt, canPage, caseInfo, fullName, protocolOf, refundEligible, samePerson, statusOf,
   visitNeedsPay, visitPaid
 } from '../clinical.js'
-import { createDoseInTx, tryAutoDay0 } from '../doses.js'
+import { autoDay0Skip, createDoseInTx, day0DoseOf, resolveVaccinator, tryAutoDay0 } from '../doses.js'
 import { applyConsume, applyRestore, doseUses } from '../inventory.js'
 import { nextId } from '../ids.js'
 import {
@@ -65,7 +65,7 @@ clinicalRouter.get('/clinical', requirePage('dashboard'), async (req, res) => {
     encounters: scopedEnc.map(encounterClient),
     doses: doses.filter(d => scopedIds.has(d.encounterId) || d.branch === user.branchName || user.allBranches).map(doseClient),
     notes: notes.filter(n => scopedIds.has(n.encounterId) || user.allBranches).map(noteClient),
-    payments: (user.allBranches || ['PO / PhilHealth Officer', 'Secretary', 'Cashier', 'Admin'].includes(user.role)
+    payments: (user.allBranches || ['PO / PhilHealth Officer', 'Secretary', 'Nurse / Staff', 'Admin'].includes(user.role)
       ? payments.filter(p => user.allBranches || p.branch === user.branchName)
       : payments.filter(p => scopedIds.has(p.encounterId))).map(paymentClient),
     referrals: referrals.filter(r => user.allBranches || r.from === user.branchName || r.to === user.branchName).map(referralClient),
@@ -76,7 +76,7 @@ clinicalRouter.get('/clinical', requirePage('dashboard'), async (req, res) => {
 
 clinicalRouter.get('/registry/next', requirePage('admissions'), async (req, res) => {
   const branch = String(req.query.branch || req.user!.branchName || 'Guimba')
-  const date = String(req.query.date || TODAY)
+  const date = String(req.query.date || clinicDate())
   if (!req.user!.allBranches && branch !== req.user!.branchName) {
     return res.status(403).json({ error: 'Hindi ito ang branch mo' })
   }
@@ -91,7 +91,7 @@ const patientSchema = z.object({
   suffix: z.string().optional().default(''),
   birthday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   sex: z.enum(['Female', 'Male']),
-  contact: z.string().optional().default(''),
+  contact: z.string().trim().min(1, 'Cellphone number is required'),
   address: z.string().optional().default(''),
   municipality: z.string().optional().default('Guimba'),
   municipalityOther: z.string().optional().default(''),
@@ -125,7 +125,7 @@ clinicalRouter.get('/patients/match', requirePage('admissions'), async (req, res
 
 clinicalRouter.post('/patients', requirePage('patients'), async (req, res) => {
   const parsed = patientSchema.safeParse(req.body)
-  if (!parsed.success) return res.status(400).json({ error: 'Last name, first name, birthday and gender are required' })
+  if (!parsed.success) return res.status(400).json({ error: 'Last name, first name, birthday, gender and cellphone are required' })
   const form = parsed.data
   if (!req.user!.allBranches && form.branch !== req.user!.branchName) {
     return res.status(403).json({ error: 'Hindi ito ang branch mo' })
@@ -213,7 +213,7 @@ clinicalRouter.post('/admissions', requirePage('admissions'), async (req, res) =
     : null
 
   if (mode === 'New patient') {
-    if (!parsed.data.patient) return res.status(400).json({ error: 'Last name, first name, birthday and gender are required' })
+    if (!parsed.data.patient) return res.status(400).json({ error: 'Last name, first name, birthday, gender and cellphone are required' })
     const form = parsed.data.patient
     const all = await prisma.patient.findMany()
     const hit = all.find(p => samePerson(p, form))
@@ -311,7 +311,7 @@ clinicalRouter.post('/admissions', requirePage('admissions'), async (req, res) =
         reference: '—',
         status: billing === 'Walk-in' ? 'Pending' : 'Not billed',
         remarks: billing === 'For PhilHealth'
-          ? 'Not billed at non-accredited branch · refer for PhilHealth'
+          ? 'Not billed · give Day 0 then refer for PhilHealth'
           : billing === 'PhilHealth' ? '₱0 · PhilHealth' : 'Payment required before treatment'
       }
     })
@@ -367,7 +367,7 @@ clinicalRouter.patch('/encounters/:id', requirePage('exposure'), async (req, res
         movement = await tx.movement.create({
           data: {
             id: await nextId(tx.movement, 'MOV-', 4),
-            date: TODAY,
+            date: clinicDate(),
             time: new Date().toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
             by: req.user!.name,
             shift: consumed.line.shift,
@@ -386,7 +386,11 @@ clinicalRouter.patch('/encounters/:id', requirePage('exposure'), async (req, res
       return { updated, line, movement }
     })
     await audit(req, { module: 'RER', action: 'RER saved for ' + result.updated.registry, record: result.updated.registry, branch: servicing })
-    const auto = await autoDay0Extras(result.updated, req.user!.name, String(body.vaccinator || ''))
+    const day0 = body.day0 as { given?: boolean; dose?: string; time?: string; side?: string; vaccinator?: string; batch?: string; animalStatus?: string } | undefined
+    const vaccinator = String(day0?.vaccinator || body.vaccinator || '')
+    const auto = day0 && day0.given === false
+      ? {}
+      : await autoDay0Extras(result.updated, req.user!.name, vaccinator, day0)
     if (auto.dose) {
       await audit(req, { module: 'Treatment', action: 'Day 0 recorded with RER · ' + result.updated.registry, record: result.updated.registry, branch: servicing })
     }
@@ -428,7 +432,7 @@ clinicalRouter.post('/encounters/:id/doses', requirePage('treatments'), async (r
   }
   const doses = await prisma.dose.findMany({ where: { encounterId: { in: [enc.id, enc.continuedFromEncounterId || '', enc.receivingEncounterId || ''].filter(Boolean) } } })
   const info = caseInfo(enc, doses)
-  if (['Incomplete', 'No PEP'].includes(info.status)) {
+  if (info.status === 'No PEP') {
     return res.status(409).json({ error: 'This case is locked · no further doses' })
   }
   const pays = await prisma.payment.findMany({ where: { encounterId: enc.id } })
@@ -565,16 +569,45 @@ type AutoDay0Extras = {
   doseError?: string
 }
 
-async function autoDay0Extras(enc: Encounter, by: string, vaccinator?: string): Promise<AutoDay0Extras> {
+async function autoDay0Extras(
+  enc: Encounter,
+  by: string,
+  vaccinator?: string,
+  day0?: { dose?: string; time?: string; side?: string; vaccinator?: string; batch?: string; animalStatus?: string }
+): Promise<AutoDay0Extras> {
   try {
     return await prisma.$transaction(async tx => {
       const pays = await tx.payment.findMany({ where: { encounterId: enc.id } })
-      const auto = await tryAutoDay0(tx, enc, pays, by, vaccinator)
-      if ('skipped' in auto) return { doseSkip: auto.reason === 'pay' ? 'pay' as const : undefined }
+      const skip = autoDay0Skip(enc, pays)
+      if (skip) return { doseSkip: skip === 'pay' ? 'pay' as const : undefined }
+      const existing = await tx.dose.findFirst({ where: { encounterId: enc.id, day: 'D0' } })
+      if (existing) return {}
+      if (!day0) {
+        const auto = await tryAutoDay0(tx, enc, pays, by, vaccinator)
+        if ('skipped' in auto) return { doseSkip: auto.reason === 'pay' ? 'pay' as const : undefined }
+        return {
+          dose: doseClient(auto.created),
+          line: inventoryClient(auto.consumed.line),
+          movement: movementClient(auto.movement)
+        }
+      }
+      const servicing = servicingBranch(enc)
+      const nurse = await resolveVaccinator(tx, servicing, day0.vaccinator || vaccinator, by)
+      if (!nurse) throw new Error('No Nurse / Staff at ' + servicing + ' · add an employee first')
+      const result = await createDoseInTx(tx, enc, {
+        day: 'D0',
+        date: enc.date,
+        time: day0.time || enc.time || new Date().toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
+        dose: day0.dose || day0DoseOf(enc),
+        side: day0.side === 'R' ? 'R' : 'L',
+        animalStatus: day0.animalStatus === 'Lost/Stray' || day0.animalStatus === 'Dead' ? day0.animalStatus : 'Alive',
+        vaccinator: nurse.name,
+        batch: day0.batch || ''
+      }, by)
       return {
-        dose: doseClient(auto.created),
-        line: inventoryClient(auto.consumed.line),
-        movement: movementClient(auto.movement)
+        dose: doseClient(result.created),
+        line: inventoryClient(result.consumed.line),
+        movement: movementClient(result.movement)
       }
     })
   } catch (err) {
@@ -601,7 +634,7 @@ clinicalRouter.post('/notes', requirePage('notes'), async (req, res) => {
         id,
         patientId,
         encounterId,
-        date: String(req.body.date || TODAY),
+        date: String(req.body.date || clinicDate()),
         s: req.body.s || {},
         animal: String(req.body.animal || 'Alive'),
         o: req.body.o || {},
@@ -634,7 +667,7 @@ clinicalRouter.post('/payments', requirePage('payments'), async (req, res) => {
         encounterId: enc.id,
         patient: enc.patient.name,
         branch: String(req.body.branch || enc.branch),
-        date: String(req.body.date || TODAY),
+        date: String(req.body.date || clinicDate()),
         service: String(req.body.service || 'Anti-rabies vaccine dose'),
         classification,
         amount: free ? 0 : Number(req.body.amount || 0),
@@ -677,7 +710,7 @@ clinicalRouter.post('/referrals', requirePage('referrals'), async (req, res) => 
         registry: enc.registry,
         originRegistry: enc.registry,
         from, to,
-        date: String(req.body.date || TODAY),
+        date: String(req.body.date || clinicDate()),
         reason: String(req.body.reason || 'Continue PEP at PhilHealth-accredited branch'),
         treatment: 'In progress',
         classification: String(req.body.classification || 'PhilHealth'),
@@ -724,24 +757,29 @@ clinicalRouter.post('/referrals/:id/accept', requirePage('referrals'), async (re
     })
     let refund = null
     if (ref.classification === 'PhilHealth') {
-      const pay = await tx.payment.findFirst({
-        where: { registry: ref.registry, branch: ref.from, status: 'Paid', NOT: { classification: 'PhilHealth' } }
+      const linkedDoses = await tx.dose.findMany({
+        where: { encounterId: { in: [source.id, source.continuedFromEncounterId || '', source.receivingEncounterId || ''].filter(Boolean) } }
       })
-      if (pay) {
-        const already = await tx.refund.findFirst({ where: { payment: pay.id } })
-        if (!already) {
-          refund = await tx.refund.create({
-            data: {
-              id: await nextId(tx.refund, 'RFD-', 3),
-              patient: ref.patient,
-              payment: pay.id,
-              branch: pay.branch,
-              amount: pay.amount,
-              reason: 'Reclassified for PhilHealth after referral to ' + ref.to,
-              requested: TODAY,
-              status: 'Pending'
-            }
-          })
+      if (refundEligible(source, linkedDoses)) {
+        const pay = await tx.payment.findFirst({
+          where: { registry: ref.registry, branch: ref.from, status: 'Paid', NOT: { classification: 'PhilHealth' } }
+        })
+        if (pay) {
+          const already = await tx.refund.findFirst({ where: { payment: pay.id } })
+          if (!already) {
+            refund = await tx.refund.create({
+              data: {
+                id: await nextId(tx.refund, 'RFD-', 3),
+                patient: ref.patient,
+                payment: pay.id,
+                branch: pay.branch,
+                amount: pay.amount,
+                reason: 'Reclassified for PhilHealth after referral to ' + ref.to,
+                requested: clinicDate(),
+                status: 'Pending'
+              }
+            })
+          }
         }
       }
     }
@@ -831,6 +869,83 @@ function receivingFrom(source: Encounter, patch: {
     receivingEncounterId: ''
   }
 }
+
+clinicalRouter.post('/encounters/:id/reclassify', requirePage('refunds'), async (req, res) => {
+  const enc = await prisma.encounter.findUnique({ where: { id: req.params.id }, include: { patient: true } })
+  if (!enc) return res.status(404).json({ error: 'Admission not found' })
+  if (!inScopeEncounter(req.user!, enc)) return res.status(403).json({ error: 'Hindi ito ang branch mo' })
+  if (enc.billing !== 'Walk-in') return res.status(400).json({ error: 'Only walk-in visits can be reclassified to PhilHealth' })
+  const branchRow = await prisma.branch.findUnique({ where: { name: enc.branch } })
+  if (branchRow?.accreditation !== 'Accredited') {
+    return res.status(400).json({ error: 'Same-branch reclassify is for accredited branches. Use a branch referral from a non-accredited site.' })
+  }
+  const doses = await prisma.dose.findMany({
+    where: { encounterId: { in: [enc.id, enc.continuedFromEncounterId || '', enc.receivingEncounterId || ''].filter(Boolean) } }
+  })
+  const eligible = refundEligible(enc, doses)
+  const result = await prisma.$transaction(async tx => {
+    const patient = await tx.patient.update({
+      where: { id: enc.patientId },
+      data: { philhealth: true, classification: 'PhilHealth' }
+    })
+    const updated = await tx.encounter.update({
+      where: { id: enc.id },
+      data: { billing: 'PhilHealth' }
+    })
+    const pays = await tx.payment.findMany({ where: { encounterId: enc.id } })
+    const refunds = []
+    for (const pay of pays) {
+      if (pay.status === 'Pending' || (pay.classification === 'Walk-in' && pay.status === 'Not billed')) {
+        await tx.payment.update({
+          where: { id: pay.id },
+          data: {
+            classification: 'PhilHealth',
+            amount: 0,
+            method: 'PhilHealth',
+            reference: '—',
+            status: 'Not billed',
+            remarks: 'Reclassified to PhilHealth'
+          }
+        })
+      } else if (pay.status === 'Paid' && Number(pay.amount) > 0 && pay.classification !== 'PhilHealth') {
+        await tx.payment.update({
+          where: { id: pay.id },
+          data: { remarks: [pay.remarks, 'Reclassified to PhilHealth · original payment kept'].filter(Boolean).join(' · ') }
+        })
+        if (eligible) {
+          const already = await tx.refund.findFirst({ where: { payment: pay.id } })
+          if (!already) {
+            refunds.push(await tx.refund.create({
+              data: {
+                id: await nextId(tx.refund, 'RFD-', 3),
+                patient: enc.patient.name,
+                payment: pay.id,
+                branch: pay.branch,
+                amount: pay.amount,
+                reason: 'Reclassified to PhilHealth at ' + enc.branch,
+                requested: clinicDate(),
+                status: 'Pending'
+              }
+            }))
+          }
+        }
+      }
+    }
+    return { updated, patient, refunds, eligible }
+  })
+  await audit(req, {
+    module: 'Payment',
+    action: 'Reclassified ' + enc.registry + ' to PhilHealth' + (result.refunds.length ? ' · refund requested' : eligible ? '' : ' · refund window closed'),
+    record: enc.registry,
+    branch: enc.branch
+  })
+  res.json({
+    encounter: encounterClient(result.updated),
+    patient: patientClient(result.patient),
+    refunds: result.refunds.map(refundClient),
+    refundEligible: eligible
+  })
+})
 
 clinicalRouter.get('/audit', requirePage('audit'), async (req, res) => {
   const user = req.user!

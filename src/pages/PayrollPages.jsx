@@ -1,6 +1,6 @@
 import React from 'react'
 import { Clock3, Printer, ShieldCheck } from 'lucide-react'
-import { branchMaster as seedBranches, employees as seedEmployees, fmt, money, payPeriods, periodInputsFromAttendance, today } from '../data'
+import { branchMaster as seedBranches, fmt, money, payPeriods, periodInputsFromAttendance, today } from '../data'
 import { resetPayrollInputApi, savePayrollInputApi } from '../api'
 import { Badge, BrandLogo, Button, Card, Field, SectionTitle, Select, Table, Tabs } from '../components'
 import { calc } from './People'
@@ -8,8 +8,7 @@ import { calc } from './People'
 const scope = (items, b) => b === 'All branches' ? items : items.filter(x => x.branch === b)
 const initials = n => n.split(' ').map(x => x[0]).join('').slice(0, 2)
 const nightOf = (list, b) => (list || seedBranches).find(x => x.name === b)?.night
-const payrollAdmins = ['Admin', 'HR']
-const ME = 'EMP-100'
+const payrollAdmins = ['Admin']
 
 function payOf(e, period, attendance, users, payrollInputs, drafts) {
   const auto = periodInputsFromAttendance(e, period, attendance, users)
@@ -18,13 +17,13 @@ function payOf(e, period, attendance, users, payrollInputs, drafts) {
 }
 
 export function PayrollPage({
-  branch, role, notify, employees = seedEmployees, branchMaster, attendance = [], users = [],
+  branch, role, notify, employees = [], branchMaster, attendance = [], users = [],
   payrollInputs = [], setPayrollInputs
 }) {
   const visible = scope(employees, branch).filter(e => e.payroll)
   const [period, setPeriod] = React.useState(payPeriods[0].id)
   const [tab, setTab] = React.useState('Payroll register')
-  const [selected, setSelected] = React.useState(visible[0]?.id || employees[0]?.id || seedEmployees[0].id)
+  const [selected, setSelected] = React.useState(visible[0]?.id || '')
   const [inputs, setInputs] = React.useState({})
   const [overrides, setOverrides] = React.useState({})
   const [otRate, setOtRate] = React.useState(1)
@@ -35,7 +34,15 @@ export function PayrollPage({
   const admin = payrollAdmins.includes(role)
   const inp = e => payOf(e, period, attendance, users, payrollInputs, inputs)
   const ov = e => overrides[e.id] || {}
-  const employee = visible.find(x => x.id === selected) || visible[0] || employees[0] || seedEmployees[0]
+  const employee = visible.find(x => x.id === selected) || visible[0]
+  if (!employee) {
+    return (
+      <>
+        <SectionTitle eyebrow="PEOPLE OPERATIONS" title="Payroll" description="Auto from Time In / Time Out after you add staff." />
+        <Card><p className="card-note">No employees yet. Add staff under Employees, then they can Time In.</p></Card>
+      </>
+    )
+  }
   const current = inp(employee)
   const c = calc(employee, current, ov(employee), otRate, branchMaster)
   const upd = ev => setInputs({
@@ -123,7 +130,7 @@ export function PayrollPage({
               <Field label="Undertime minutes" name="undertime" type="number" value={current.undertime} onChange={upd} disabled={!admin} />
               <Field label="Other approved deductions" name="other" type="number" value={current.other} onChange={upd} disabled={!admin} />
             </div>
-            <p className="card-note">{current.stored ? 'Updated by ' + (current.by || 'Admin / HR') + (current.reason ? ' · ' + current.reason : '') : 'Auto from Time In / Time Out for this cutoff (' + (current.auto?.days || 0) + ' days).'} Late / undertime = Daily rate ÷ hours ÷ 60 × minutes.</p>
+            <p className="card-note">{current.stored ? 'Updated by ' + (current.by || 'Admin') + (current.reason ? ' · ' + current.reason : '') : 'Auto from Time In / Time Out for this cutoff (' + (current.auto?.days || 0) + ' days).'} Late / undertime = Daily rate ÷ hours ÷ 60 × minutes.</p>
           </Card>
           <Card title="Additional earnings">
             <div className="form-grid">
@@ -180,22 +187,30 @@ export function PayrollPage({
           { label: 'EMPLOYEES', key: 'count' }, { label: 'GROSS', render: r => money(r.gross) }, { label: 'NET PAY', render: r => <strong>{money(r.net)}</strong> },
           { label: 'STATUS', render: r => <Badge>{r.pay < today ? 'Released' : 'Open'}</Badge> }
         ]} rows={payPeriods.map(p => { const rs = visible.map(e => calc(e, payOf(e, p.id, attendance, users, payrollInputs, inputs), ov(e), otRate, branchMaster)); return { id: p.id, ...p, count: rs.length, gross: rs.reduce((a, r) => a + r.gross, 0), net: rs.reduce((a, r) => a + r.net, 0) } })} />
-        <p className="card-note">History uses Time In unless Admin / HR saved an update for that cutoff.</p>
+        <p className="card-note">History uses Time In unless Admin saved an update for that cutoff.</p>
       </Card>}
     </>
   )
 }
 
 export function PayslipsPage({
-  branch, role, employees = seedEmployees, employeeId, branchMaster, attendance = [], users = [], payrollInputs = []
+  branch, role, employees = [], employeeId, branchMaster, attendance = [], users = [], payrollInputs = []
 }) {
   const admin = payrollAdmins.includes(role)
-  const me = employeeId || employees.find(e => e.id === ME)?.id || employees[0]?.id || ME
+  const me = employeeId || employees[0]?.id || ''
   const visible = admin ? scope(employees, branch) : employees.filter(e => e.id === me)
   const [id, setId] = React.useState(visible[0]?.id || me)
   const [period, setPeriod] = React.useState(payPeriods[0].id)
-  const employee = employees.find(x => x.id === id) || employees[0] || seedEmployees[0]
+  const employee = employees.find(x => x.id === id) || visible[0] || employees[0]
   const P = payPeriods.find(p => p.id === period)
+  if (!employee) {
+    return (
+      <>
+        <SectionTitle eyebrow="PEOPLE OPERATIONS" title="Payslips" description="Payslips appear after you add employees and they Time In." />
+        <Card><p className="card-note">No employees yet. Add staff under Employees first.</p></Card>
+      </>
+    )
+  }
   const current = payOf(employee, period, attendance, users, payrollInputs, {})
   const c = calc(employee, current, {}, 1, branchMaster)
   return (
@@ -219,7 +234,7 @@ export function PayslipsPage({
           <div><h3>Deductions</h3><div><span>Late</span><strong>{money(c.lateDed)}</strong></div><div><span>Undertime</span><strong>{money(c.underDed)}</strong></div><div><span>SSS</span><strong>{money(c.sss)}</strong></div><div><span>PhilHealth</span><strong>{money(c.phil)}</strong></div><div><span>Pag-IBIG</span><strong>{money(c.pagibig)}</strong></div><div><span>Other approved deductions</span><strong>{money(c.other)}</strong></div></div>
         </div>
         <div className="payslip-net"><span>NET PAY</span><strong>{money(c.net)}</strong></div>
-        <p>{current.stored ? 'Updated by Admin / HR · ' + (current.reason || '') : 'Auto from Time In / Time Out'} · Statutory tables require production validation.</p>
+        <p>{current.stored ? 'Updated by Admin · ' + (current.reason || '') : 'Auto from Time In / Time Out'} · Statutory tables require production validation.</p>
       </div>
     </>
   )

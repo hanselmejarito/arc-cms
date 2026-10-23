@@ -41,7 +41,7 @@ authRouter.post('/login', async (req, res) => {
       role: user.role,
       branchName: user.branchName,
       employeeId: user.employeeId,
-      allBranches: ['Admin', 'HR'].includes(user.role)
+      allBranches: user.role === 'Admin'
     }
   })
 })

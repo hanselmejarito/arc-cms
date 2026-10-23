@@ -1,0 +1,10 @@
+node_modules
+server/node_modules
+server/dist
+dist
+.git
+.env
+server/.env
+*.log
+.cursor
+agent-transcripts

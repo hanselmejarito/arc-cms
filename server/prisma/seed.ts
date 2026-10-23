@@ -9,6 +9,7 @@ import {
 
 const prisma = new PrismaClient()
 const DEMO_PASSWORD = 'Demo@2026'
+const clinicOnly = process.argv.includes('--clinic')
 
 type Enc = (typeof encounters)[number]
 
@@ -49,6 +50,17 @@ async function main() {
     }))
   })
 
+  if (clinicOnly) {
+    const passwordHash = await argon2.hash(DEMO_PASSWORD)
+    await prisma.user.create({
+      data: { name: 'Admin', email: 'admin@arc.local', passwordHash, role: 'Admin', branchName: null, employeeId: null }
+    })
+    console.log('Seeded empty ARC clinic for live encoding')
+    console.log('  Login: admin@arc.local / Demo@2026')
+    console.log('  Add real staff under Employees. Stock in inventory before Day 0.')
+    return
+  }
+
   await prisma.employee.createMany({
     data: employees.map(e => ({
       id: e.id,
@@ -67,15 +79,12 @@ async function main() {
 
   const empByName = Object.fromEntries(employees.map(e => [e.name, e.id]))
   const passwordHash = await argon2.hash(DEMO_PASSWORD)
-  const allBranchRoles = ['Admin', 'HR']
+  const allBranchRoles = ['Admin']
   const demoUsers = [
     { name: 'Alex Rivera', email: 'admin@arc.local', passwordHash, role: 'Admin', branchName: null, employeeId: null },
-    { name: 'Skyler Ong', email: 'hr@arc.local', passwordHash, role: 'HR', branchName: null, employeeId: empByName['Skyler Ong'] },
     { name: 'Jamie Torres', email: 'nurse@arc.local', passwordHash, role: 'Nurse / Staff', branchName: 'Guimba', employeeId: empByName['Jamie Torres'] },
     { name: 'Lyka Tenorio', email: 'po@arc.local', passwordHash, role: 'PO / PhilHealth Officer', branchName: 'Guimba', employeeId: empByName['Lyka Tenorio'] },
-    { name: 'Taylor Aquino', email: 'secretary@arc.local', passwordHash, role: 'Secretary', branchName: 'Palayan', employeeId: empByName['Taylor Aquino'] },
-    { name: 'Morgan Lim', email: 'cashier@arc.local', passwordHash, role: 'Cashier', branchName: 'Cabanatuan', employeeId: empByName['Morgan Lim'] },
-    { name: 'Drew Salazar', email: 'employee@arc.local', passwordHash, role: 'Employee', branchName: 'Laur', employeeId: empByName['Drew Salazar'] }
+    { name: 'Taylor Aquino', email: 'secretary@arc.local', passwordHash, role: 'Secretary', branchName: 'Palayan', employeeId: empByName['Taylor Aquino'] }
   ]
   const linked = new Set(demoUsers.map(u => u.employeeId).filter(Boolean))
   const restUsers = employees.filter(e => !linked.has(e.id)).map(e => ({

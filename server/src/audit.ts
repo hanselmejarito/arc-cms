@@ -1,6 +1,6 @@
 import type { Request } from 'express'
 import { prisma } from './prisma.js'
-import { TODAY } from './clinical.js'
+import { clinicDate } from './clinical.js'
 
 export async function audit(req: Request, input: {
   module: string
@@ -21,7 +21,7 @@ export async function audit(req: Request, input: {
       record: input.record || '—',
       oldValue: input.oldValue || '—',
       newValue: input.newValue || 'Saved',
-      time: `${TODAY} · ${time}`,
+      time: `${clinicDate()} · ${time}`,
       branch: input.branch || user?.branchName || 'Guimba',
       device: req.get('user-agent')?.slice(0, 180) || ''
     }
