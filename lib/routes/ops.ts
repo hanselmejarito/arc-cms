@@ -111,17 +111,19 @@ export async function workspaceExtras(user: AuthedUser) {
       : Promise.resolve([] as AuditLog[]),
     seeOt ? prisma.overtimeRequest.findMany({ orderBy: { date: 'desc' } }) : Promise.resolve([] as OvertimeRequest[])
   ] as const)
-  if (canInv) {
-    const names = user.allBranches
-      ? (await prisma.branch.findMany({ select: { name: true } })).map(b => b.name)
-      : (user.branchName ? [user.branchName] : [])
-    for (const name of names) await prisma.$transaction(tx => catchUpBranch(tx, name))
-  }
+  const staleBranches = new Set(canInv ? inventory.filter(row => row.date < clinicDate()).map(row => row.branch) : [])
+  const namesToCatchUp = user.allBranches
+    ? [...staleBranches]
+    : (user.branchName && staleBranches.has(user.branchName) ? [user.branchName] : [])
+  for (const name of namesToCatchUp) await prisma.$transaction(tx => catchUpBranch(tx, name))
+  const [currentInventory, currentLedger] = namesToCatchUp.length
+    ? await Promise.all([prisma.inventoryLine.findMany(), prisma.ledgerRow.findMany({ orderBy: { date: 'asc' } })])
+    : [inventory, ledger]
   const inBranch = (b: string) => user.allBranches || b === user.branchName
   return {
     branches: branches.map(branchClient),
-    inventory: inventory.filter(x => inBranch(x.branch)).map(inventoryClient),
-    ledger: ledger.filter(x => inBranch(x.branch)).map(ledgerClient),
+    inventory: currentInventory.filter(x => inBranch(x.branch)).map(inventoryClient),
+    ledger: currentLedger.filter(x => inBranch(x.branch)).map(ledgerClient),
     received: received.filter(x => inBranch(x.branch)).map(receivedClient),
     movements: movements.filter(x => inBranch(x.branch)).map(movementClient).sort(byWhen),
     finance: finance.filter(x => inBranch(x.branch)).map(financeClient),
