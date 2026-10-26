@@ -10,10 +10,22 @@ import {
 const prisma = new PrismaClient()
 const DEMO_PASSWORD = 'Demo@2026'
 const clinicOnly = process.argv.includes('--clinic')
+const production = process.env.NODE_ENV === 'production'
+const clinicPassword = process.env.SEED_ADMIN_PASSWORD || (production ? '' : DEMO_PASSWORD)
 
 type Enc = (typeof encounters)[number]
 
 async function main() {
+  if (production && !clinicOnly) throw new Error('Demo records cannot be seeded in production.')
+  if (clinicOnly && ((production && !process.env.SEED_ADMIN_PASSWORD) || (process.env.SEED_ADMIN_PASSWORD && clinicPassword.length < 16))) {
+    throw new Error('Set SEED_ADMIN_PASSWORD to at least 16 characters before seeding this clinic.')
+  }
+  const [existingBranches, existingUsers, existingPatients] = await Promise.all([
+    prisma.branch.count(), prisma.user.count(), prisma.patient.count()
+  ])
+  if ((existingBranches > 0 || existingUsers > 0 || existingPatients > 0) && !process.argv.includes('--reset')) {
+    throw new Error('Database already has clinic data. Refusing to reseed without --reset.')
+  }
   await prisma.contributionOverride.deleteMany()
   await prisma.overtimeRequest.deleteMany()
   await prisma.payrollInput.deleteMany()
@@ -58,7 +70,7 @@ async function main() {
       data: { name: 'Admin', email: 'superadmin@arc.clinic', passwordHash, role: 'Superadmin', branchName: null, employeeId: null }
     })
     console.log('Seeded empty ARC clinic for live encoding')
-    console.log('  Login: superadmin@arc.clinic / Demo@2026')
+    console.log('  Login: superadmin@arc.clinic (password supplied through SEED_ADMIN_PASSWORD)')
     console.log('  Add real staff under Employees. Stock in inventory before Day 0.')
     return
   }
@@ -404,7 +416,7 @@ async function main() {
   }
 
   console.log('Seeded ARC clinic · demo password Demo@2026')
-  console.log('  superadmin@arc.clinic (Admin) · nurse@arc.local (Nurse / Guimba) · po@arc.local')
+  console.log('  superadmin@arc.clinic (Superadmin) · nurse@arc.local (Nurse / Guimba) · po@arc.local')
 }
 
 main().catch(err => {

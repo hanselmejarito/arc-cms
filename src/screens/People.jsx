@@ -11,7 +11,7 @@ export function calc(e,inp,ov={},otRate=1,branchMaster,ctx={}){const rate=Number
 
 export function EmployeesPage({branch,notify,employees=[],setEmployees,setUsers,branchMaster}){
  const rows=employees
- const blank=()=>({name:'',email:'',password:'Demo@2026',branch:branch==='All branches'?'Guimba':branch,position:'Clinic Staff',role:'Nurse',rate:650,hours:8,shift:'Morning Shift',status:'Active',officer:false,payroll:true,benefits:false})
+ const blank=()=>({name:'',email:'',password:'',branch:branch==='All branches'?'Guimba':branch,position:'Clinic Staff',role:'Nurse',rate:650,hours:8,shift:'Morning Shift',status:'Active',officer:false,payroll:true,benefits:false})
  const [q,setQ]=React.useState('')
  const [add,setAdd]=React.useState(false)
  const [edit,setEdit]=React.useState(null)

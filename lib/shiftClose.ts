@@ -1,4 +1,4 @@
-import type { Branch, InventoryLine, PrismaClient } from '@prisma/client'
+import type { Branch, InventoryLine, LedgerRow, PrismaClient } from '@prisma/client'
 import { addDays, clinicDate } from './clinical.js'
 import { nextId } from './ids.js'
 
@@ -6,8 +6,8 @@ type Tx = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction'
 
 export async function closeShiftOnce(tx: Tx, branchRow: Pick<Branch, 'name' | 'night'>, lines: InventoryLine[], signature: string) {
   const movements = await tx.movement.findMany({ where: { branch: branchRow.name } })
-  const ledger = []
-  const inventory = []
+  const ledger: LedgerRow[] = []
+  const inventory: InventoryLine[] = []
   for (const x of lines) {
     ledger.push(await tx.ledgerRow.create({
       data: {

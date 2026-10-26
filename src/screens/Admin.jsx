@@ -14,7 +14,7 @@ const staffOf=(employees,role,branch)=>allBranchRoles.includes(role)||branch==='
 const pickLink=(pool,current)=>pool.some(e=>e.id===current)?current:(pool[0]?.id||'')
 export function UsersPage({notify,users=[],setUsers,employees=[],branch='All branches'}){
  const home=branch==='All branches'?'Guimba':branch
- const blank=()=>{const pool=staffOf(employees,'Nurse',home);return {name:'',email:'',password:'Demo@2026',role:'Nurse',branch:home,employee:pickLink(pool,''),status:'Active'}}
+ const blank=()=>{const pool=staffOf(employees,'Nurse',home);return {name:'',email:'',password:'',role:'Nurse',branch:home,employee:pickLink(pool,''),status:'Active'}}
  const [tab,setTab]=React.useState('Permission matrix'),[modal,setModal]=React.useState(null)
  const [form,setForm]=React.useState(blank)
  const linkable=staffOf(employees,form.role,form.branch)

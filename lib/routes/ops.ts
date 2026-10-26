@@ -1,5 +1,6 @@
 import { ApiRouter } from '../router.js'
 import { z } from 'zod'
+import type { AuditLog, ContributionOverride, Employee, FinanceEntry, InventoryLine, LedgerRow, Movement, OvertimeRequest, PayrollInput, ReceivedRow, Refund, User } from '@prisma/client'
 import { prisma } from '../prisma.js'
 import { audit } from '../audit.js'
 import { canAccessBranch, hashPassword, requireAny, requireAuth, requirePage, type AuthedUser } from '../auth.js'
@@ -84,32 +85,32 @@ export async function workspaceExtras(user: AuthedUser) {
   const seeOt = canPage(user.role, 'attendance') || canPage(user.role, 'payslips') || canPage(user.role, 'payroll')
   const [branches, inventory, ledger, received, movements, finance, refunds, employees, attendance, users, payrollInputs, contributionOverrides, attendanceCorrectionRows, overtimeRequests] = await Promise.all([
     prisma.branch.findMany({ orderBy: { name: 'asc' } }),
-    canInv ? prisma.inventoryLine.findMany() : Promise.resolve([]),
-    canInv ? prisma.ledgerRow.findMany({ orderBy: { date: 'asc' } }) : Promise.resolve([]),
-    canInv ? prisma.receivedRow.findMany({ orderBy: { date: 'asc' } }) : Promise.resolve([]),
-    canInv ? prisma.movement.findMany({ orderBy: [{ date: 'desc' }, { id: 'desc' }] }) : Promise.resolve([]),
-    canFin || canPay ? prisma.financeEntry.findMany({ orderBy: { date: 'desc' } }) : Promise.resolve([]),
-    canRef || canPay ? prisma.refund.findMany({ orderBy: { requested: 'desc' } }) : Promise.resolve([]),
-    canEmp ? prisma.employee.findMany({ orderBy: { id: 'asc' }, include: { users: { select: { email: true } } } }) : Promise.resolve([]),
+    canInv ? prisma.inventoryLine.findMany() : Promise.resolve([] as InventoryLine[]),
+    canInv ? prisma.ledgerRow.findMany({ orderBy: { date: 'asc' } }) : Promise.resolve([] as LedgerRow[]),
+    canInv ? prisma.receivedRow.findMany({ orderBy: { date: 'asc' } }) : Promise.resolve([] as ReceivedRow[]),
+    canInv ? prisma.movement.findMany({ orderBy: [{ date: 'desc' }, { id: 'desc' }] }) : Promise.resolve([] as Movement[]),
+    canFin || canPay ? prisma.financeEntry.findMany({ orderBy: { date: 'desc' } }) : Promise.resolve([] as FinanceEntry[]),
+    canRef || canPay ? prisma.refund.findMany({ orderBy: { requested: 'desc' } }) : Promise.resolve([] as Refund[]),
+    canEmp ? prisma.employee.findMany({ orderBy: { id: 'asc' }, include: { users: { select: { email: true } } } }) : Promise.resolve([] as Employee[]),
     prisma.attendance.findMany({
       where: payrollAdmin ? (user.allBranches ? {} : { branch: user.branchName || '' }) : { userId: user.id },
       include: { user: { select: { employeeId: true, name: true } } },
       orderBy: { date: 'desc' }
     }),
-    canUsers || payrollAdmin ? prisma.user.findMany({ orderBy: { name: 'asc' } }) : Promise.resolve([]),
+    canUsers || payrollAdmin ? prisma.user.findMany({ orderBy: { name: 'asc' } }) : Promise.resolve([] as User[]),
     canPage(user.role, 'payroll') || canPage(user.role, 'payslips')
       ? prisma.payrollInput.findMany()
-      : Promise.resolve([]),
-    seeContrib ? prisma.contributionOverride.findMany({ orderBy: { createdAt: 'desc' } }) : Promise.resolve([]),
+      : Promise.resolve([] as PayrollInput[]),
+    seeContrib ? prisma.contributionOverride.findMany({ orderBy: { createdAt: 'desc' } }) : Promise.resolve([] as ContributionOverride[]),
     payrollAdmin
       ? prisma.auditLog.findMany({
         where: { action: 'Attendance correction', ...(user.allBranches ? {} : { branch: user.branchName || '' }) },
         orderBy: { createdAt: 'desc' },
         take: 200
       })
-      : Promise.resolve([]),
-    seeOt ? prisma.overtimeRequest.findMany({ orderBy: { date: 'desc' } }) : Promise.resolve([])
-  ])
+      : Promise.resolve([] as AuditLog[]),
+    seeOt ? prisma.overtimeRequest.findMany({ orderBy: { date: 'desc' } }) : Promise.resolve([] as OvertimeRequest[])
+  ] as const)
   if (canInv) {
     const names = user.allBranches
       ? (await prisma.branch.findMany({ select: { name: true } })).map(b => b.name)
@@ -352,8 +353,8 @@ opsRouter.post('/inventory/adjust', requirePage('adjustments'), async (req, res)
       data: { stock: line.stock + (decrease ? -form.quantity : form.quantity), ...(branchRow && !branchRow.night ? { shift: 'MS' as const } : {}) }
     })
     const lines = [source]
-    const movements = []
-    let received = null
+    const movements: Movement[] = []
+    let received: ReceivedRow | null = null
     movements.push(await tx.movement.create({
       data: {
         id: await nextId(tx.movement, 'MOV-', 4),
@@ -683,7 +684,7 @@ opsRouter.post('/users', requirePage('users'), async (req, res) => {
   }
   const isSuper = form.role === 'Superadmin'
   if (!isSuper && !form.employee) return deny(res, 'Linked employee is required', 400)
-  let emp = null
+  let emp: Employee | null = null
   if (form.employee) {
     emp = await prisma.employee.findUnique({ where: { id: form.employee } })
     if (!emp) return deny(res, 'Linked employee not found', 400)
@@ -856,7 +857,7 @@ opsRouter.patch('/users/:id', requirePage('users'), async (req, res) => {
     if (!branchName) return deny(res, 'Branch is required for this role', 400)
     await assertBranch(branchName)
   }
-  let emp = null
+  let emp: Employee | null = null
   if (!isSuper && form.employee) {
     emp = await prisma.employee.findUnique({ where: { id: form.employee } })
     if (!emp) return deny(res, 'Linked employee not found', 400)
@@ -1112,21 +1113,11 @@ opsRouter.post('/payroll/inputs', requirePage('payroll'), async (req, res) => {
     reason: form.reason,
     by
   }
-  let saved
-  try {
-    saved = await prisma.payrollInput.upsert({
-      where,
-      create: { ...base, holidaySpecial: special, holidayType: 'Regular' },
-      update: { ...base, holidaySpecial: special, holidayType: 'Regular' }
-    })
-  } catch (err) {
-    if (!String((err as Error)?.message || err).includes('holidaySpecial')) throw err
-    saved = await prisma.payrollInput.upsert({
-      where,
-      create: { ...base, holidayType: String(special) },
-      update: { ...base, holidayType: String(special) }
-    })
-  }
+  const saved = await prisma.payrollInput.upsert({
+    where,
+    create: { ...base, holidaySpecial: special, holidayType: 'Regular' },
+    update: { ...base, holidaySpecial: special, holidayType: 'Regular' }
+  })
   await audit(req, { module: 'Payroll', action: 'Payroll input updated from Time In', record: emp.name + ' · ' + form.periodId, branch: emp.branch, oldValue: 'Auto from Time In', newValue: form.reason })
   res.json(payrollInputClient(saved))
 })

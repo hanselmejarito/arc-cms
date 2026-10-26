@@ -8,7 +8,7 @@ export const ITEM_MASTER = [
   { item: 'Bioshoot', type: 'Anti-rabies vaccine', unit: 'vials', usesPerVial: 5, threshold: 30 },
   { item: 'Speeda', type: 'Anti-rabies vaccine · PVRV', unit: 'vials', usesPerVial: 5, threshold: 30 },
   { item: 'Abhayrab', type: 'Anti-rabies vaccine · PVRV', unit: 'vials', usesPerVial: 5, threshold: 30 },
-  { item: 'Serum', type: 'Rabies immunoglobulin (ERIG)', unit: 'vials', usesPerVial: 0, threshold: 5 },
+  { item: 'ERIG (serum)', type: 'Rabies immunoglobulin (ERIG)', unit: 'vials', usesPerVial: 0, threshold: 5 },
   { item: 'Tetanus Toxoid', type: 'Tetanus vaccine', unit: 'vials', usesPerVial: 0, threshold: 20 },
   { item: 'Influvac', type: 'Flu vaccine', unit: 'vials', usesPerVial: 0, threshold: 4 },
   { item: 'Pneumococcal', type: 'Pneumococcal vaccine', unit: 'vials', usesPerVial: 0, threshold: 3 }

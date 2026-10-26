@@ -1,6 +1,6 @@
 import { ApiRouter } from '../router.js'
 import { z } from 'zod'
-import type { Encounter, Payment, Prisma } from '@prisma/client'
+import type { Encounter, InventoryLine, Movement, Payment, Prisma, Refund } from '@prisma/client'
 import { prisma } from '../prisma.js'
 import { audit, publicAudit } from '../audit.js'
 import { canAccessBranch, requireAuth, requirePage, servicingBranch, type AuthedUser } from '../auth.js'
@@ -185,7 +185,7 @@ clinicalRouter.patch('/patients/:id', requirePage('patients'), async (req, res) 
         classification: next.philhealth ? 'PhilHealth' : 'Walk-in'
       }
     })
-    let encounter = null
+    let encounter: Encounter | null = null
     let refunds: Awaited<ReturnType<typeof reclassifyWalkInInTx>>['refunds'] = []
     let eligible = false
     let payments: Awaited<ReturnType<typeof reclassifyWalkInInTx>>['payments'] = []
@@ -360,7 +360,7 @@ clinicalRouter.post('/admissions', requirePage('admissions'), async (req, res) =
         patient: patient.name,
         branch: visit.branch,
         date: visit.date,
-        service: billing === 'Walk-in' ? 'Not set yet' : 'Anti-rabies vaccine dose',
+        service: billing === 'Walk-in' ? 'Not set yet' : 'Anti-rabies vaccine',
         classification: billing,
         amount: 0,
         method: billing === 'PhilHealth' ? 'PhilHealth' : '—',
@@ -394,12 +394,12 @@ clinicalRouter.post('/admissions', requirePage('admissions'), async (req, res) =
 
 function openBillLines(enc: { billing: string, booster: boolean, preExp: boolean, category: string }) {
   if (enc.booster) return [{ service: 'Booster dose', price: 750, status: 'Pending' as const, remarks: 'Not yet paid' }]
-  if (enc.billing === 'PhilHealth') return [{ service: 'Anti-rabies vaccine dose', price: 0, status: 'Not billed' as const, remarks: '₱0 · PhilHealth' }]
-  if (enc.billing === 'For PhilHealth') return [{ service: 'Anti-rabies vaccine dose', price: 0, status: 'Not billed' as const, remarks: 'Not billed · give Day 0 then refer for PhilHealth' }]
+  if (enc.billing === 'PhilHealth') return [{ service: 'Anti-rabies vaccine', price: 0, status: 'Not billed' as const, remarks: '₱0 · PhilHealth' }]
+  if (enc.billing === 'For PhilHealth') return [{ service: 'Anti-rabies vaccine', price: 0, status: 'Not billed' as const, remarks: 'Not billed · give Day 0 then refer for PhilHealth' }]
   if (enc.billing && enc.billing !== 'Walk-in') return []
-  if (enc.preExp || enc.category === 'II') return [{ service: 'Anti-rabies vaccine dose', price: 750, status: 'Pending' as const, remarks: 'Not yet paid' }]
+  if (enc.preExp || enc.category === 'II') return [{ service: 'Anti-rabies vaccine', price: 750, status: 'Pending' as const, remarks: 'Not yet paid' }]
   if (enc.category === 'III') return [
-    { service: 'Anti-rabies vaccine dose', price: 750, status: 'Pending' as const, remarks: 'Not yet paid' },
+    { service: 'Anti-rabies vaccine', price: 750, status: 'Pending' as const, remarks: 'Not yet paid' },
     { service: 'ERIG (serum)', price: 2600, status: 'Pending' as const, remarks: 'Not yet paid' },
     { service: 'Tetanus Toxoid', price: 300, status: 'Pending' as const, remarks: 'Not yet paid' }
   ]
@@ -452,7 +452,7 @@ async function syncOpenBill(tx: Prisma.TransactionClient, _before: Encounter, up
   const open = rows.filter(p => p.status === 'Pending' || p.status === 'Not billed')
   const txn = rows.find(p => p.txn)?.txn || await issueTxn(tx, updated.branch, updated.date)
   if (open.length) await tx.payment.deleteMany({ where: { id: { in: open.map(p => p.id) } } })
-  const created = []
+  const created: Payment[] = []
   for (const spec of specs) {
     created.push(await tx.payment.create({
       data: {
@@ -545,8 +545,8 @@ clinicalRouter.patch('/encounters/:id', requirePage('exposure'), async (req, res
   const servicing = servicingBranch(existing)
   try {
     const result = await prisma.$transaction(async tx => {
-      let line = null
-      let movement = null
+      let line: InventoryLine | null = null
+      let movement: Movement | null = null
       if (firstTt) {
         const consumed = await applyConsume(tx, 'Tetanus Toxoid', servicing, 1)
         if ('error' in consumed) throw new Error(consumed.error)
@@ -683,8 +683,8 @@ clinicalRouter.patch('/encounters/:id/doses/:day', requirePage('treatments'), as
   const delta = newUses - oldUses
   try {
     const result = await prisma.$transaction(async tx => {
-      let line = null
-      let movement = null
+      let line: InventoryLine | null = null
+      let movement: Movement | null = null
       if (delta > 0) {
         const consumed = await applyConsume(tx, enc.brand, servicing, delta)
         if ('error' in consumed) throw new Error(consumed.error)
@@ -833,7 +833,7 @@ clinicalRouter.post('/notes', requirePage('notes'), async (req, res) => {
         encounterId,
         date: String(req.body.date || clinicDate()),
         s: req.body.s || {},
-        animal: String(req.body.animal || 'Alive'),
+        animal: String(req.body.animal || ''),
         o: req.body.o || {},
         a: req.body.a || {},
         p: req.body.p || {},
@@ -847,7 +847,7 @@ clinicalRouter.post('/notes', requirePage('notes'), async (req, res) => {
 })
 
 const SERVICE_PRICES: Record<string, number> = {
-  'Anti-rabies vaccine dose': 750,
+  'Anti-rabies vaccine': 750,
   'ERIG (serum)': 2600,
   'Booster dose': 750,
   'Tetanus Toxoid': 300,
@@ -896,7 +896,7 @@ clinicalRouter.post('/payments', requirePage('payments'), async (req, res) => {
         if (free) throw new Error('PhilHealth and For PhilHealth visits have no follow-up bill.')
         if (!extras.length) throw new Error('Add at least one service')
         const followTxn = await issueTxn(tx, branch, date)
-        const rows = []
+        const rows: Payment[] = []
         for (const line of extras) {
           rows.push(await tx.payment.create({
             data: {
@@ -955,7 +955,7 @@ clinicalRouter.post('/payments', requirePage('payments'), async (req, res) => {
         }
       }
       if (!payRows.length) throw new Error('Add at least one service')
-      const rows = []
+      const rows: Payment[] = []
       for (const row of payRows) {
         rows.push(await tx.payment.update({
           where: { id: row.id },
@@ -966,15 +966,15 @@ clinicalRouter.post('/payments', requirePage('payments'), async (req, res) => {
     }
     const rawLines = Array.isArray(req.body.lines) && req.body.lines.length
       ? req.body.lines
-      : [{ service: req.body.service || 'Anti-rabies vaccine dose', qty: 1 }]
+      : [{ service: req.body.service || 'Anti-rabies vaccine', qty: 1 }]
     const lines = rawLines.map((line: { service?: string, qty?: number }) => {
       const service = String(line.service || '').replace(/ × \d+$/, '')
       const qty = Math.max(0, Number(line.qty) || 0)
       return { service, qty, price: SERVICE_PRICES[service] }
     }).filter(line => line.qty > 0 && line.price && !(booster && line.service === 'ERIG (serum)'))
     if (!free && !lines.length) throw new Error('Add at least one service')
-    const bill = free ? [{ service: lines[0]?.service || 'Anti-rabies vaccine dose', qty: 1, price: 0 }] : lines
-    const rows = []
+    const bill = free ? [{ service: lines[0]?.service || 'Anti-rabies vaccine', qty: 1, price: 0 }] : lines
+    const rows: Payment[] = []
     for (let i = 0; i < bill.length; i++) {
       const line = bill[i]
       const data = {
@@ -1082,7 +1082,7 @@ clinicalRouter.post('/referrals/:id/accept', requirePage('referrals'), async (re
       where: { id: ref.id },
       data: { status: 'Accepted', receivingRegistry, receivingEncounterId: receiving.id }
     })
-    let refund = null
+    let refund: Refund | null = null
     if (ref.classification === 'PhilHealth') {
       const linkedDoses = await tx.dose.findMany({
         where: { encounterId: { in: [source.id, source.continuedFromEncounterId || '', source.receivingEncounterId || ''].filter(Boolean) } }

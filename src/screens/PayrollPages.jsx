@@ -1,6 +1,6 @@
 import React from 'react'
 import { Clock3, Printer, ShieldCheck } from 'lucide-react'
-import { branchMaster as seedBranches, fmt, money, overrideFor, payPeriods, periodInputsFromAttendance, today } from '../data'
+import { branchMaster as seedBranches, fmt, money, overrideFor, payPeriods, periodInputsFromAttendance } from '../data'
 import { decideOvertimeApi, resetPayrollInputApi, saveContributionOverrideApi, savePayrollInputApi } from '../api'
 import { Badge, BrandLogo, Button, Card, Field, Modal, SectionTitle, Select, Table, Tabs } from '../components'
 import { calc } from './People'
@@ -58,6 +58,32 @@ export function PayrollPage({
     [period + employee.id]: { ...current, [ev.target.name]: ev.target.type === 'checkbox' ? ev.target.checked : ev.target.value }
   })
   const register = visible.map(e => ({ ...e, c: pay(e), i: inp(e) }))
+  const employeeByUser = new Map(users.map(u => [u.id, u.employeeId || u.employee]))
+  const historyRows = payPeriods.flatMap(p => {
+    const members = visible.filter(e =>
+      payrollInputs.some(input => input.employeeId === e.id && input.periodId === p.id) ||
+      attendance.some(row =>
+        row.date >= p.from && row.date <= p.to && row.in &&
+        (row.employeeId === e.id || employeeByUser.get(row.userId) === e.id)
+      )
+    )
+    if (!members.length) return []
+    const amounts = members.map(e => calc(
+      e,
+      payOf(e, p.id, attendance, users, payrollInputs, {}, overtimeRequests),
+      ov(e, p.id),
+      1,
+      branchMaster,
+      { payday: p.half }
+    ))
+    return [{
+      id: p.id, ...p, count: members.length,
+      gross: amounts.reduce((sum, amount) => sum + amount.gross, 0),
+      net: amounts.reduce((sum, amount) => sum + amount.net, 0),
+      source: members.some(e => payrollInputs.some(input => input.employeeId === e.id && input.periodId === p.id))
+        ? 'Saved update' : 'Attendance'
+    }]
+  })
   const total = k => register.reduce((a, r) => a + r.c[k], 0)
   const lines = [
     ['Basic pay (' + c.days + ' duty days)', c.basic, 'plus'],
@@ -205,9 +231,9 @@ export function PayrollPage({
         <Table columns={[
           { label: 'PAY PERIOD', key: 'label' }, { label: 'CUTOFF', render: r => fmt(r.cutoff) }, { label: 'RELEASE', render: r => fmt(r.pay) },
           { label: 'EMPLOYEES', key: 'count' }, { label: 'GROSS', render: r => money(r.gross) }, { label: 'NET PAY', render: r => <strong>{money(r.net)}</strong> },
-          { label: 'STATUS', render: r => <Badge>{r.pay < today ? 'Released' : 'Open'}</Badge> }
-        ]} rows={payPeriods.map(p => { const rs = visible.map(e => pay(e, p.id)); return { id: p.id, ...p, count: rs.length, gross: rs.reduce((a, r) => a + r.gross, 0), net: rs.reduce((a, r) => a + r.net, 0) } })} />
-        <p className="card-note">History uses Time In unless Admin saved an update for that cutoff. Approved overtime comes from Attendance requests.</p>
+          { label: 'SOURCE', render: r => <Badge>{r.source}</Badge> }
+        ]} rows={historyRows} empty="No payroll history yet. Time In or save a payroll update to create a record." />
+        <p className="card-note">Only cutoffs with Time In or a saved payroll update appear. Approved overtime comes from Attendance requests.</p>
       </Card>}
       {decision && <Modal title={(decision.status === 'Approved' ? 'Approve' : 'Reject') + ' overtime · ' + decision.name} onClose={() => setDecision(null)} footer={<><Button variant="secondary" onClick={() => setDecision(null)}>Cancel</Button><Button onClick={async () => { if (!decision.reason.trim()) { notify('A reason is required'); return } try { const saved = await decideOvertimeApi(decision.id, { status: decision.status, reason: decision.reason.trim() }); if (setOvertimeRequests) setOvertimeRequests(list => [saved, ...list.filter(x => x.id !== saved.id)]); setDecision(null); notify('Overtime ' + saved.status.toLowerCase() + ' for ' + decision.name, 'Payroll') } catch (err) { notify(err.message, 'error') } }}>{decision.status === 'Approved' ? 'Approve' : 'Reject'}</Button></>}><Field label="Reason (required)" type="textarea" value={decision.reason} onChange={e => setDecision({ ...decision, reason: e.target.value })} placeholder="Verified against the Bundy clock" /></Modal>}
     </>

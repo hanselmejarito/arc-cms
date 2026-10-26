@@ -9,7 +9,8 @@
     "start": "next start",
     "postinstall": "prisma generate",
     "seed:clinic": "tsx prisma/seed.ts --clinic",
-    "seed:demo": "tsx prisma/seed.ts"
+    "seed:demo": "tsx prisma/seed.ts",
+    "test:clinical": "tsx scripts/smoke-clinical.ts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
