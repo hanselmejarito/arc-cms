@@ -1,45 +1,25 @@
 # ARC Anti Rabies Clinic
 
-React / Vite UI plus an Express + TypeScript API and PostgreSQL. Clinic writes (patients, inventory, finance, refunds, employees, attendance, users, and branch settings) persist in the database. Theme may stay in browser localStorage.
-
-Demo records are fictional. Prototype date remains **2026-10-14**.
+Next.js app (UI + `/api`) and PostgreSQL. The previous Vite + Express stack is in the sibling repo `cms_backup`.
 
 ## Stack
 
-- Frontend: React + Vite (JavaScript)
-- API: Node.js + Express + TypeScript + Prisma
-- Database: PostgreSQL 16 (Docker)
-- Auth: login + httpOnly cookie session (argon2). No JWT in localStorage. No Redis.
+- Next.js 15 (React UI + `/api` route handlers)
+- Prisma + PostgreSQL 16 (Docker)
+- Auth: httpOnly cookie session (argon2)
 
 ## Run locally
 
-Docker Desktop must be running. Node.js 20+.
-
 ```bash
 docker compose up -d
-cp server/.env.example server/.env
-cd server
+cp .env.example .env
 npm install
 npx prisma migrate deploy
-npx prisma generate
-npm run seed
+npm run seed:clinic
 npm run dev
 ```
 
-In another terminal, from the project root:
-
-```bash
-npm install
-npm run dev
-```
-
-Open the Vite URL (usually http://localhost:5173). Vite proxies `/api` to the API on port 4000.
-
-Production UI build:
-
-```bash
-npm run build
-```
+Open http://localhost:3000.
 
 ### Demo accounts
 
@@ -47,7 +27,7 @@ Password for all: `Demo@2026`
 
 | Email | Role | Branch |
 |---|---|---|
-| admin@arc.local | Admin (super admin) | All branches |
+| superadmin@arc.clinic | Superadmin | All branches |
 | hr@arc.local | HR | All branches |
 | nurse@arc.local | Nurse / Staff | Guimba |
 | po@arc.local | PO / PhilHealth Officer | Guimba |
@@ -59,20 +39,16 @@ Signing in does not record attendance. Use **Time In** / **Time Out** inside the
 
 ## Deploy notes
 
-Serve the API and UI over **HTTPS**. Set `COOKIE_SECURE=true` and a long random `SESSION_SECRET` in `server/.env`. Do not commit `.env`. CORS `CLIENT_ORIGIN` must be the real UI origin.
+Serve over **HTTPS**. Set `COOKIE_SECURE=true`, a long random `SESSION_SECRET`, and `CLIENT_ORIGIN` to the real URL. Do not commit `.env`.
 
 ## Structure
 
+- `src/app/` — Next.js layout, page, `/api` catch-all
+- `lib/` — Prisma, auth, clinic rules, Express routers (bridged into Next)
+- `prisma/` — schema, migrations, seed
+- `src/screens/` — clinic UI
 - `docker-compose.yml` — PostgreSQL 16
-- `server/` — Express API, Prisma schema, seed
-- `src/App.jsx` — shell, session, workspace fetch
-- `src/api.js` — `fetch` helper (`credentials: 'include'`)
-- `src/data.js` — protocols, branch master, mock seed source
-- `src/pages/Clinical.jsx` — patients, admissions, RER, treatment, SOAP, schedule
-- `src/pages/Operations.jsx` — inventory, payments, finance, referrals, refunds
-- `src/pages/People.jsx` — employees, attendance, payroll
-- `src/pages/Reports.jsx` — reports from loaded records
-- `src/pages/Admin.jsx` — branches, users, audit, settings
+- `../cms_backup` — Vite + Express snapshot
 
 ## Phase 1 rules (locked)
 
