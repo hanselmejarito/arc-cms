@@ -18,7 +18,13 @@ import {
 } from '../map.js'
 import { issueRegistry, issueTxn, nextPrefixedId, peekRegistry } from '../registry.js'
 import { workspaceExtras } from './ops.js'
+import { readPhoto } from '../photoInput.js'
 import { readSignature } from '../signatureInput.js'
+
+function optionalPhoto(body: unknown) {
+  if (!body || typeof body !== 'object' || !('photo' in body)) return undefined
+  return readPhoto((body as { photo: unknown }).photo)
+}
 
 export const clinicalRouter = new ApiRouter()
 clinicalRouter.use(requireAuth)
@@ -128,6 +134,9 @@ clinicalRouter.get('/patients/match', requirePage('admissions'), async (req, res
 clinicalRouter.post('/patients', requirePage('patients'), async (req, res) => {
   const parsed = patientSchema.safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ error: 'Last name, first name, birthday, gender and cellphone are required' })
+  let photo: string | null | undefined
+  try { photo = optionalPhoto(req.body) }
+  catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : 'Choose a valid patient photo.' }) }
   const form = parsed.data
   if (!req.user!.allBranches && form.branch !== req.user!.branchName) {
     return res.status(403).json({ error: 'This is not your branch' })
@@ -154,11 +163,12 @@ clinicalRouter.post('/patients', requirePage('patients'), async (req, res) => {
         name: fullName(form),
         age,
         senior: age >= 60,
-        classification: form.philhealth ? 'PhilHealth' : 'Walk-in'
+        classification: form.philhealth ? 'PhilHealth' : 'Walk-in',
+        ...(photo ? { photo } : {})
       }
     })
   })
-  await audit(req, { module: 'Patients', action: 'Created patient master record', record: created.name, branch: created.branch })
+  await audit(req, { module: 'Patients', action: 'Created patient master record' + (photo ? ' · photo recorded' : ''), record: created.name, branch: created.branch })
   res.json(patientClient(created))
 })
 
@@ -170,6 +180,9 @@ clinicalRouter.patch('/patients/:id', requirePage('patients'), async (req, res) 
     sex: z.enum(['Female', 'Male']).optional()
   }).safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ error: 'Last name, first name, birthday and gender are required' })
+  let photo: string | null | undefined
+  try { photo = optionalPhoto(req.body) }
+  catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : 'Choose a valid patient photo.' }) }
   const existing = await prisma.patient.findUnique({ where: { id: req.params.id } })
   if (!existing) return res.status(404).json({ error: 'Patient not found' })
   const next = { ...existing, ...parsed.data }
@@ -183,7 +196,8 @@ clinicalRouter.patch('/patients/:id', requirePage('patients'), async (req, res) 
         name: fullName(next),
         age,
         senior: age >= 60,
-        classification: next.philhealth ? 'PhilHealth' : 'Walk-in'
+        classification: next.philhealth ? 'PhilHealth' : 'Walk-in',
+        ...(photo !== undefined ? { photo } : {})
       }
     })
     let encounter: Encounter | null = null
@@ -208,7 +222,7 @@ clinicalRouter.patch('/patients/:id', requirePage('patients'), async (req, res) 
     }
     return { patient, encounter, refunds, eligible, payments }
   })
-  await audit(req, { module: 'Patients', action: 'Updated patient details', record: result.patient.name, branch: result.patient.branch })
+  await audit(req, { module: 'Patients', action: 'Updated patient details' + (photo === undefined ? '' : photo ? ' · photo recorded' : ' · photo removed'), record: result.patient.name, branch: result.patient.branch })
   if (result.encounter) {
     await audit(req, {
       module: 'Payment',
@@ -256,7 +270,10 @@ clinicalRouter.post('/admissions', requirePage('admissions'), async (req, res) =
     ? await prisma.patient.findUnique({ where: { id: parsed.data.patientId } })
     : null
 
+  let photo: string | null | undefined
   if (mode === 'New patient') {
+    try { photo = optionalPhoto(req.body.patient) }
+    catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : 'Choose a valid patient photo.' }) }
     if (!parsed.data.patient) return res.status(400).json({ error: 'Last name, first name, birthday, gender and cellphone are required' })
     const form = parsed.data.patient
     const all = await prisma.patient.findMany()
@@ -302,7 +319,8 @@ clinicalRouter.post('/admissions', requirePage('admissions'), async (req, res) =
           id, ...form, name: fullName(form), age,
           senior: age >= 60,
           philhealth: form.philhealth || forPH,
-          classification: (form.philhealth || forPH) ? 'PhilHealth' : 'Walk-in'
+          classification: (form.philhealth || forPH) ? 'PhilHealth' : 'Walk-in',
+          ...(photo ? { photo } : {})
         }
       })
     }

@@ -75,6 +75,7 @@ model Patient {
   philhealth        Boolean     @default(false)
   branch            String
   classification    String      @default("Walk-in")
+  photo             String?
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
   encounters        Encounter[]

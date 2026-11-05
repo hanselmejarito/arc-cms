@@ -24,7 +24,8 @@ export function patientClient(p: Patient) {
     vetmed: p.vetmed,
     philhealth: p.philhealth,
     branch: p.branch,
-    classification: p.classification
+    classification: p.classification,
+    photo: p.photo || ''
   }
 }
 

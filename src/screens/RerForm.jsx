@@ -76,6 +76,50 @@ const animalMark=(n,key)=>{
 
 const soapNum=v=>String(v||'').replace(/^Day\s+/i,'')
 
+function FittedSignature({src, alt, className}){
+ const [fitted,setFitted]=React.useState(src)
+ React.useEffect(()=>{
+  if(!src){setFitted('');return}
+  let cancel=false
+  const image=new Image()
+  image.onload=()=>{
+   const w=image.naturalWidth,h=image.naturalHeight
+   if(!w||!h)return
+   const canvas=document.createElement('canvas')
+   canvas.width=w
+   canvas.height=h
+   const ctx=canvas.getContext('2d',{willReadFrequently:true})
+   ctx.drawImage(image,0,0)
+   let pixels
+   try{pixels=ctx.getImageData(0,0,w,h).data}catch{return}
+   let minX=w,minY=h,maxX=-1,maxY=-1
+   for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+     if(pixels[(y*w+x)*4+3]>20){
+      if(x<minX)minX=x
+      if(y<minY)minY=y
+      if(x>maxX)maxX=x
+      if(y>maxY)maxY=y
+     }
+    }
+   }
+   if(maxX<0)return
+   const pad=Math.max(6,Math.round(Math.max(maxX-minX,maxY-minY)*0.12))
+   const sx=Math.max(0,minX-pad),sy=Math.max(0,minY-pad)
+   const sw=Math.min(w-sx,maxX-sx+1+pad),sh=Math.min(h-sy,maxY-sy+1+pad)
+   const out=document.createElement('canvas')
+   out.width=sw
+   out.height=sh
+   out.getContext('2d').drawImage(canvas,sx,sy,sw,sh,0,0,sw,sh)
+   if(!cancel)setFitted(out.toDataURL('image/png'))
+  }
+  image.src=src
+  return ()=>{cancel=true}
+ },[src])
+ if(!fitted)return null
+ return <img src={fitted} alt={alt} className={className}/>
+}
+
 function SoapPaperBlock({n}){
  const s=n?.s||{},o=n?.o||{},a=n?.a||{},p=n?.p||{}
  return <div className="soap-paper-block">
@@ -102,7 +146,7 @@ function SoapPaperBlock({n}){
    </div>
   </div>
   <div className={'soap-paper-sign'+(n?.signature?' has-signature':'')}>
-   {n?.signature&&<img src={n.signature} alt="Progress note signature" className="soap-signature-overlay"/>}
+   <div className="soap-signature-space">{n?.signature&&<FittedSignature src={n.signature} alt="Progress note signature" className="soap-signature-overlay"/>}</div>
    <em>{n?.staff||''}</em>
    <span>NAME & SIGNATURE</span>
   </div>
@@ -158,7 +202,7 @@ function soapPages(notes){
 }
 
 export function AdmissionSheet({e,p,notes=[],doses=[]}){
- const visitNotes=(notes||[]).filter(n=>!n.encounterId||n.encounterId===e.id)
+ const visitNotes=(notes||[]).filter(n=>!n.encounterId||n.encounterId===e.id).slice().sort((a,b)=>String(a.date).localeCompare(String(b.date))||String(a.id).localeCompare(String(b.id)))
  return <div className="admission-sheet">
   <RerSheet e={e} p={p} doses={doses}/>
   {soapPages(visitNotes).map((page,i)=>
@@ -192,7 +236,7 @@ export function RerSheet({e,p,doses}){
     <p>{paperPlace(br)}</p>
     <small>Mobile No: {(br.contact||'09469451531').replace(/\s/g,'')} / EMAIL ADDRESS arcantirabisclinic@gmail.com</small>
    </div>
-   <span className="arc-form-head-spacer" aria-hidden="true"/>
+   <span className="arc-patient-photo">{p.photo?<img src={p.photo} alt="Patient photo"/>:null}</span>
   </header>
 
   <div className="arc-id">

@@ -148,6 +148,7 @@ html.print-rer .arc-form .body-marker{animation:none!important}
 html.print-rer .arc-chief{font-size:7pt}
 html.print-rer .arc-form{min-height:0}
 html.print-rer .arc-form-head{min-height:24mm}
+html.print-rer .arc-patient-photo{width:22mm;height:22mm}
 html.print-rer .arc-id{min-height:20mm}
 html.print-rer .arc-main{min-height:78mm}
 html.print-rer .arc-lower{min-height:125mm}
@@ -192,6 +193,8 @@ html.print-admission .soap-paper .arc-box{width:11px;height:11px}
 .arc-box svg{display:block;width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:2.7;stroke-linecap:round;stroke-linejoin:round}
 .arc-yn{white-space:nowrap}
 .arc-form-head{display:grid;grid-template-columns:72px 1fr 72px;gap:10px;align-items:center;border-bottom:2px solid #222;padding-bottom:8px;margin-bottom:8px}
+.arc-patient-photo{width:72px;height:72px;border:1px solid #222;background:#fff;overflow:hidden;justify-self:end}
+.arc-patient-photo img{width:100%;height:100%;object-fit:cover;display:block}
 .arc-form-logo{width:72px;height:72px;border-radius:50%;overflow:hidden;border:0;background:#ffcc00;flex:none;box-shadow:none}
 .arc-form-logo .brand-logo{width:100%;height:100%;object-fit:cover;display:block}
 .arc-form-title{min-width:0}
@@ -371,5 +374,19 @@ html.print-rer .arc-consent-block{flex:1;min-height:0;justify-content:flex-end}
 html.print-rer .arc-signature-slot>span{line-height:1.15}
 
 .soap-paper-sign{position:relative}
-.soap-signature-overlay{position:absolute;left:50%;top:2mm;transform:translateX(-50%);height:9mm;width:35mm;max-width:90%;object-fit:contain;pointer-events:none}
-html.print-admission .soap-paper-sign.has-signature em{align-items:flex-end;padding-bottom:.5mm}
+.soap-signature-space{flex:1;display:flex;align-items:center;justify-content:center;width:100%;min-height:0}
+.soap-paper-sign:not(.has-signature) .soap-signature-space{display:none}
+.soap-signature-overlay{position:static;display:block;width:auto;height:auto;max-width:88%;max-height:48px;object-fit:contain;object-position:center;pointer-events:none}
+.soap-paper-sign.has-signature em{flex:none;min-height:0;align-items:center}
+.profile-avatar,.person-avatar{overflow:hidden}
+.profile-avatar img,.person-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+.patient-photo{display:flex;align-items:flex-start;gap:14px;margin:0 0 14px}
+.patient-photo.compact{margin:0}
+.patient-photo-frame{width:92px;height:92px;border:1px solid #d5e2e2;border-radius:10px;background:#f4f8f8;display:grid;place-items:center;overflow:hidden;flex:none;color:#7d9393;font-size:12px;font-weight:700}
+.patient-photo-frame img{width:100%;height:100%;object-fit:cover;display:block}
+.patient-photo-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.patient-photo.compact .patient-photo-actions{flex-wrap:nowrap}
+.patient-photo-backdrop{position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:20px}
+.patient-photo-video{display:block;width:100%;height:auto;max-height:min(70vh,520px);background:#111;border-radius:8px;object-fit:contain}
+html.print-admission .soap-paper-sign.has-signature em{flex:none;align-items:center;padding-bottom:0}
+html.print-admission .soap-signature-overlay{max-width:30mm;max-height:16mm}
