@@ -81,6 +81,9 @@ export function encounterClient(e: Encounter) {
     temp: e.temp,
     consent: e.consent,
     consentBy: e.consentBy,
+    consentSignature: e.consentSignature,
+    consentSignedAt: e.consentSignedAt,
+    consentRecordedBy: e.consentRecordedBy,
     tt: e.tt,
     rig: e.rig,
     erig: e.erig,
@@ -89,6 +92,10 @@ export function encounterClient(e: Encounter) {
     animalStatus: e.animalStatus,
     progress: e.progress,
     doctor: e.doctor,
+    doctorSignature: e.doctorSignature,
+    doctorSignatureMethod: e.doctorSignatureMethod,
+    doctorSignedAt: e.doctorSignedAt,
+    doctorRecordedBy: e.doctorRecordedBy,
     remark: e.remark,
     transferredTo: e.transferredTo,
     died: e.died,
@@ -136,6 +143,10 @@ export function noteClient(n: ProgressNote) {
     a: n.a,
     p: n.p,
     staff: n.staff,
+    signature: n.signature,
+    signatureMethod: n.signatureMethod,
+    signedAt: n.signedAt,
+    recordedBy: n.recordedBy,
     branch: n.branch
   }
 }

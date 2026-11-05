@@ -65,8 +65,15 @@ export async function dispatch(request: NextRequest) {
   try {
     await hit.route.handler(req, res)
   } catch (err) {
-    console.error(err)
-    return NextResponse.json({ error: err instanceof Error ? err.message : 'Server error' }, { status: 500 })
+    // Database errors may contain query arguments, including signature images.
+    const name = err instanceof Error ? err.name : 'UnknownError'
+    const code = err && typeof err === 'object' && 'code' in err ? String(err.code) : ''
+    console.error('API request failed', { name, code })
+    const message = err instanceof Error ? err.message : ''
+    const databaseError = name.startsWith('Prisma') || message.includes('data:image/') || message.includes('Invalid \`prisma.')
+    return NextResponse.json({ error: databaseError
+      ? 'Unable to save the record. Please reload and try again. Contact your administrator if the issue continues.'
+      : message || 'Server error' }, { status: 500 })
   }
 
   const out = NextResponse.json(res.body ?? {}, { status: res.statusCode || 200 })

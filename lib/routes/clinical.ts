@@ -18,6 +18,7 @@ import {
 } from '../map.js'
 import { issueRegistry, issueTxn, nextPrefixedId, peekRegistry } from '../registry.js'
 import { workspaceExtras } from './ops.js'
+import { readSignature } from '../signatureInput.js'
 
 export const clinicalRouter = new ApiRouter()
 clinicalRouter.use(requireAuth)
@@ -530,8 +531,45 @@ clinicalRouter.patch('/encounters/:id', requirePage('exposure'), async (req, res
   } else if ((body.category === 'II' || body.category === 'III') && body.pepEligible == null) {
     body.pepEligible = true
   }
+  // Signature is captured once for this admission; subsequent edits cannot replace it.
+  if (body.consentSignature != null && body.consentSignature !== '' && body.consentSignature !== existing.consentSignature) {
+    if (existing.consentSignature) return res.status(409).json({ error: 'A signature is already saved for this admission.' })
+    const signature = body.consentSignature
+    if (typeof signature !== 'string' || signature.length > 350000 || !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(signature)) {
+      return res.status(400).json({ error: 'A valid PNG signature is required.' })
+    }
+    const bytes = Buffer.from(signature.slice('data:image/png;base64,'.length), 'base64')
+    if (bytes.length < 100 || bytes.length > 250000 || !bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
+      return res.status(400).json({ error: 'A valid PNG signature is required.' })
+    }
+    if (typeof body.consentBy !== 'string' || !body.consentBy.trim()) {
+      return res.status(400).json({ error: 'Enter the signer name.' })
+    }
+  }
+  if (existing.consentSignature && (body.consent === false || ('consentBy' in body && body.consentBy !== existing.consentBy))) {
+    return res.status(409).json({ error: 'The signer and signed status cannot be changed after capture.' })
+  }
+  const signatureToSave = !existing.consentSignature && typeof body.consentSignature === 'string' && body.consentSignature
+    ? body.consentSignature : null
+  const doctorSignatureToSave = !existing.doctorSignature && typeof body.doctorSignature === 'string' && body.doctorSignature
+    ? body.doctorSignature : null
+  if (body.doctorSignature && body.doctorSignature !== existing.doctorSignature) {
+    if (existing.doctorSignature) return res.status(409).json({ error: 'A doctor signature is already saved for this admission.' })
+    const signature = body.doctorSignature
+    if (typeof signature !== 'string' || signature.length > 350000 || !/^data:image\/png;base64,[A-Za-z0-9+/]+={0,2}$/.test(signature))
+      return res.status(400).json({ error: 'A valid PNG signature is required.' })
+    const bytes = Buffer.from(signature.slice('data:image/png;base64,'.length), 'base64')
+    if (bytes.length < 100 || bytes.length > 250000 || !bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])))
+      return res.status(400).json({ error: 'A valid PNG signature is required.' })
+    if (typeof body.doctor !== 'string' || !body.doctor.trim())
+      return res.status(400).json({ error: 'Enter the doctor name.' })
+    if (body.doctorSignatureMethod !== 'upload' && body.doctorSignatureMethod !== 'pen')
+      return res.status(400).json({ error: 'Select a valid signature method.' })
+  }
+  if (existing.doctorSignature && 'doctor' in body && body.doctor !== existing.doctor)
+    return res.status(409).json({ error: 'The doctor name cannot be changed after a signature is saved.' })
   const allowed = [
-    'chief', 'animal', 'animalOther', 'biteType', 'pet', 'vaccinated', 'stray', 'owned', 'owner',
+    'chief' , 'animal', 'animalOther', 'biteType', 'pet', 'vaccinated', 'stray', 'owned', 'owner',
     'biteDate', 'biteTime', 'side', 'site', 'place', 'washed', 'tandok', 'wound', 'category',
     'booster', 'preExp', 'vaccine', 'brand', 'regimen', 'history', 'bp', 'weight', 'temp',
     'consent', 'consentBy', 'tt', 'rig', 'erig', 'pepEligible', 'animalStatus', 'progress',
@@ -539,6 +577,18 @@ clinicalRouter.patch('/encounters/:id', requirePage('exposure'), async (req, res
   ]
   const data: Record<string, unknown> = {}
   for (const k of allowed) if (k in body) data[k] = body[k]
+  if (signatureToSave) {
+    data.consent = true
+    data.consentSignature = signatureToSave
+    data.consentSignedAt = new Date()
+    data.consentRecordedBy = req.user!.id
+  }
+  if (doctorSignatureToSave) {
+    data.doctorSignature = doctorSignatureToSave
+    data.doctorSignatureMethod = body.doctorSignatureMethod
+    data.doctorSignedAt = new Date()
+    data.doctorRecordedBy = req.user!.id
+  }
   const prevTt = (existing.tt || {}) as { given?: boolean; refused?: boolean }
   const nextTt = ('tt' in data ? data.tt : prevTt) as { given?: boolean; refused?: boolean }
   const firstTt = !!nextTt.given && !prevTt.given && !nextTt.refused
@@ -569,12 +619,20 @@ clinicalRouter.patch('/encounters/:id', requirePage('exposure'), async (req, res
           }
         })
       }
-      const updated = await tx.encounter.update({ where: { id: existing.id }, data })
+      if (signatureToSave || doctorSignatureToSave) {
+        const claimed = await tx.encounter.updateMany({ where: { id: existing.id, ...(signatureToSave ? { consentSignature: null } : {}), ...(doctorSignatureToSave ? { doctorSignature: null } : {}) }, data })
+        if (!claimed.count) throw new Error('A signature was already saved for this admission. Reload the record.')
+      }
+      const updated = signatureToSave || doctorSignatureToSave
+        ? await tx.encounter.findUniqueOrThrow({ where: { id: existing.id } })
+        : await tx.encounter.update({ where: { id: existing.id }, data })
       const patient = await tx.patient.findUnique({ where: { id: updated.patientId } })
       const payments = await syncOpenBill(tx, existing, updated, patient?.name || '')
       return { updated, line, movement, payments }
     })
     await audit(req, { module: 'RER', action: 'RER saved for ' + result.updated.registry, record: result.updated.registry, branch: servicing })
+    if (signatureToSave) await audit(req, { module: 'Consent', action: 'Admission signature recorded', record: result.updated.registry, branch: servicing })
+    if (doctorSignatureToSave) await audit(req, { module: 'RER', action: 'Doctor signature recorded (' + body.doctorSignatureMethod + ')', record: result.updated.registry, branch: servicing })
     const day0 = body.day0 as { given?: boolean; dose?: string; time?: string; side?: string; vaccinator?: string; batch?: string; animalStatus?: string } | undefined
     const vaccinator = String(day0?.vaccinator || body.vaccinator || '')
     const auto = day0?.given === true
@@ -824,6 +882,11 @@ clinicalRouter.post('/notes', requirePage('notes'), async (req, res) => {
   const enc = await prisma.encounter.findUnique({ where: { id: encounterId } })
   if (!enc || enc.patientId !== patientId) return res.status(400).json({ error: 'SOAP must be tied to this visit registry' })
   if (!inScopeEncounter(req.user!, enc)) return res.status(403).json({ error: 'This is not your branch' })
+  let signature: ReturnType<typeof readSignature>
+  try { signature = readSignature(req.body.signature, req.body.signatureMethod) }
+  catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid signature.' }) }
+  const staff = String(req.body.staff || req.user!.name).trim()
+  if (signature && !staff) return res.status(400).json({ error: 'Select the signer name.' })
   const created = await prisma.$transaction(async tx => {
     const id = await nextPrefixedId(tx, 'ProgressNote', 'PN-', 5)
     return tx.progressNote.create({
@@ -837,12 +900,13 @@ clinicalRouter.post('/notes', requirePage('notes'), async (req, res) => {
         o: req.body.o || {},
         a: req.body.a || {},
         p: req.body.p || {},
-        staff: String(req.body.staff || req.user!.name),
+        staff,
+        ...(signature ? { signature: signature.image, signatureMethod: signature.method, signedAt: new Date(), recordedBy: req.user!.id } : {}),
         branch: servicingBranch(enc)
       }
     })
   })
-  await audit(req, { module: 'Progress note', action: 'Progress note linked to ' + enc.registry, record: enc.registry, branch: created.branch })
+  await audit(req, { module: 'Progress note', action: 'Progress note linked to ' + enc.registry + (signature ? ' · signature recorded (' + signature.method + ')' : ''), record: enc.registry, branch: created.branch })
   res.json(noteClient(created))
 })
 

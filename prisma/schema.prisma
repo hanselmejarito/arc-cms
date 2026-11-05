@@ -119,6 +119,9 @@ model Encounter {
   temp                       String          @default("")
   consent                    Boolean         @default(false)
   consentBy                  String          @default("")
+  consentSignature           String?
+  consentSignedAt             DateTime?
+  consentRecordedBy           String?
   tt                         Json
   rig                        String          @default("")
   erig                       Json
@@ -127,6 +130,10 @@ model Encounter {
   animalStatus               String          @default("")
   progress                   Json
   doctor                     String          @default("")
+  doctorSignature            String?
+  doctorSignatureMethod      String?
+  doctorSignedAt             DateTime?
+  doctorRecordedBy           String?
   remark                     String          @default("")
   transferredTo              String          @default("")
   died                       Boolean         @default(false)
@@ -181,6 +188,10 @@ model ProgressNote {
   a           Json
   p           Json
   staff       String
+  signature   String?
+  signatureMethod String?
+  signedAt    DateTime?
+  recordedBy  String?
   branch      String
   createdAt   DateTime   @default(now())
 }

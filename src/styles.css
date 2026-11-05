@@ -342,3 +342,34 @@ html.print-admission .soap-paper .arc-box{width:11px;height:11px}
 .calendar-grid .cal-apt.due{background:#fff4df;color:#9a6b12}
 .calendar-grid .cal-apt.missed{background:#fde8e6;color:#a3453c}
 @media screen{:root[data-theme=dark] .calendar-nav>strong{color:#e6ebf2}:root[data-theme=dark] .calendar-nav>button{background:#172238;border-color:#22304a;color:#e6ebf2}:root[data-theme=dark] .calendar-weekdays>span{color:#7d8aa0}:root[data-theme=dark] .calendar-grid>div.cal-empty{background:#0d1524}:root[data-theme=dark] .calendar-grid .cal-apt{background:rgb(20 146 139 / 16%);color:#5fd3c8}:root[data-theme=dark] .calendar-grid .cal-apt.due{background:rgb(255 204 0 / 14%);color:#ffd84d}:root[data-theme=dark] .calendar-grid .cal-apt.missed{background:rgb(196 92 92 / 18%);color:#ffc9c9}}
+
+.arc-consent-signature{display:block;max-width:100%;width:100%;height:12mm;object-fit:contain}
+
+/* Signature capture actions share the clinic button system. */
+.signature-control{margin:12px 0}
+.signature-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+.signature-control .button{min-height:44px;padding:10px 16px;cursor:pointer}
+.signature-control .button:not(:disabled):hover{filter:brightness(.96);box-shadow:0 2px 6px #173e4b18}
+.signature-control .button:focus-visible{outline:3px solid #2c7898;outline-offset:3px}
+.signature-control .button:disabled{cursor:not-allowed;opacity:.5}
+.signature-help{font-size:12px;line-height:1.5;color:#627b80;margin:8px 0 12px}
+.signature-preview{margin:0;border:1px solid #dbe5e8;border-radius:9px;padding:12px 16px;background:#fff}
+.signature-preview figcaption{font-size:11px;font-weight:800;color:#627b80;letter-spacing:.04em}
+.signature-preview img{display:block;width:100%;max-width:360px;height:90px;object-fit:contain;margin:8px 0}
+.signature-preview p{font-size:12px;color:#627b80;margin:0}
+.signature-error{padding:10px 12px;border:1px solid #e4b5b5;background:#fff4f4;border-radius:6px;color:#962f2f;font-size:13px}
+.signature-dialog{background:#fff;color:#203044;border-radius:12px;width:min(900px,100%);max-height:90vh;overflow:auto;padding:24px;box-shadow:0 12px 40px #0005}
+.signature-dialog-actions{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-top:18px}
+@media(max-width:520px){.signature-actions{align-items:stretch}.signature-actions .button{flex:1}.signature-dialog{padding:16px}.signature-dialog-actions>.signature-actions{flex:1}}
+
+/* Signatures overlay the original space without adding a row to the form. */
+.arc-signature-slot{position:relative;isolation:isolate}
+.arc-signature-slot>span{position:relative;z-index:1}
+.arc-signature-overlay{position:absolute;left:50%;bottom:3mm;transform:translateX(-50%);width:40mm;max-width:90%;height:7mm;object-fit:contain;pointer-events:none}
+html.print-rer .arc-consent-panel{display:flex;flex-direction:column;min-height:0}
+html.print-rer .arc-consent-block{flex:1;min-height:0;justify-content:flex-end}
+html.print-rer .arc-signature-slot>span{line-height:1.15}
+
+.soap-paper-sign{position:relative}
+.soap-signature-overlay{position:absolute;left:50%;top:2mm;transform:translateX(-50%);height:9mm;width:35mm;max-width:90%;object-fit:contain;pointer-events:none}
+html.print-admission .soap-paper-sign.has-signature em{align-items:flex-end;padding-bottom:.5mm}

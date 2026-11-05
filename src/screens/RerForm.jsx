@@ -101,7 +101,8 @@ function SoapPaperBlock({n}){
     </div>
    </div>
   </div>
-  <div className="soap-paper-sign">
+  <div className={'soap-paper-sign'+(n?.signature?' has-signature':'')}>
+   {n?.signature&&<img src={n.signature} alt="Progress note signature" className="soap-signature-overlay"/>}
    <em>{n?.staff||''}</em>
    <span>NAME & SIGNATURE</span>
   </div>
@@ -257,10 +258,13 @@ export function RerSheet({e,p,doses}){
   <div className="arc-lower">
    <div className="arc-doses">{paperDays.map(row=><DoseBlock key={row.day} row={row} g={info.given.find(x=>x.day===row.day)}/>)}</div>
    <div className="arc-side">
-    <div className="arc-panel">
+    <div className="arc-panel arc-consent-panel">
      <h3>CONSENT FORM</h3>
      <div className="arc-indent arc-consent-block">
-      <div className="arc-sign-name">{e.consent?e.consentBy:''}</div>
+      <div className="arc-sign-name arc-signature-slot">
+       {e.consentSignature&&<img src={e.consentSignature} alt="Admission signature" className="arc-signature-overlay"/>}
+       <span>{e.consent?e.consentBy:''}</span>
+      </div>
       <div className="arc-sign-rule" aria-hidden="true"/>
       <p className="arc-sign-label">SIGNATURE OVER PRINTED NAME</p>
      </div>
@@ -294,7 +298,10 @@ export function RerSheet({e,p,doses}){
       </div>
      </div>
      <div className="arc-doc">
-      <div className="arc-sign-name">{e.doctor||''}</div>
+      <div className="arc-sign-name arc-signature-slot">
+       {e.doctorSignature&&<img src={e.doctorSignature} alt="Doctor signature" className="arc-signature-overlay"/>}
+       <span>{e.doctor||''}</span>
+      </div>
       <div className="arc-sign-rule" aria-hidden="true"/>
       <p className="arc-sign-label">Doctor’s Signature</p>
      </div>
