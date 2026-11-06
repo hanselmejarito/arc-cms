@@ -26,54 +26,62 @@ async function main() {
   if ((existingBranches > 0 || existingUsers > 0 || existingPatients > 0) && !process.argv.includes('--reset')) {
     throw new Error('Database already has clinic data. Refusing to reseed without --reset.')
   }
-  await prisma.contributionOverride.deleteMany()
-  await prisma.overtimeRequest.deleteMany()
-  await prisma.payrollInput.deleteMany()
-  await prisma.attendance.deleteMany()
-  await prisma.movement.deleteMany()
-  await prisma.ledgerRow.deleteMany()
-  await prisma.receivedRow.deleteMany()
-  await prisma.inventoryLine.deleteMany()
-  await prisma.financeEntry.deleteMany()
-  await prisma.refund.deleteMany()
-  await prisma.dose.deleteMany()
-  await prisma.progressNote.deleteMany()
-  await prisma.payment.deleteMany()
-  await prisma.referral.deleteMany()
-  await prisma.encounter.deleteMany()
-  await prisma.patient.deleteMany()
-  await prisma.session.deleteMany()
-  await prisma.auditLog.deleteMany()
-  await prisma.registryCounter.deleteMany()
-  await prisma.user.deleteMany()
-  await prisma.employee.deleteMany()
-  await prisma.branch.deleteMany()
+  const clinicPasswordHash = clinicOnly ? await argon2.hash(clinicPassword) : null
+  await prisma.$transaction(async tx => {
+    await tx.otherTreatmentPayment.deleteMany()
+    await tx.otherTreatment.deleteMany()
+    await tx.otherTreatmentCounter.deleteMany()
+    await tx.signatureCorrection.deleteMany()
+    await tx.contributionOverride.deleteMany()
+    await tx.overtimeRequest.deleteMany()
+    await tx.payrollInput.deleteMany()
+    await tx.attendance.deleteMany()
+    await tx.movement.deleteMany()
+    await tx.ledgerRow.deleteMany()
+    await tx.receivedRow.deleteMany()
+    await tx.inventoryLine.deleteMany()
+    await tx.financeEntry.deleteMany()
+    await tx.refund.deleteMany()
+    await tx.dose.deleteMany()
+    await tx.progressNote.deleteMany()
+    await tx.payment.deleteMany()
+    await tx.referral.deleteMany()
+    await tx.encounter.deleteMany()
+    await tx.patient.deleteMany()
+    await tx.session.deleteMany()
+    await tx.auditLog.deleteMany()
+    await tx.registryCounter.deleteMany()
+    await tx.user.deleteMany()
+    await tx.employee.deleteMany()
+    await tx.branch.deleteMany()
 
-  await prisma.branch.createMany({
-    data: branchMaster.map(b => ({
-      name: b.name,
-      code: branchCodes[b.name as keyof typeof branchCodes],
-      address: b.address,
-      contact: b.contact,
-      hours: b.hours,
-      accreditation: b.accreditation,
-      night: b.night,
-      main: !!b.main,
-      morning: b.morning !== false,
-      status: b.status || 'Active'
-    }))
-  })
-
-  if (clinicOnly) {
-    const passwordHash = await argon2.hash(DEMO_PASSWORD)
-    await prisma.user.create({
-      data: { name: 'Admin', email: 'superadmin@arc.clinic', passwordHash, role: 'Superadmin', branchName: null, employeeId: null }
+    await tx.branch.createMany({
+      data: branchMaster.map(b => ({
+        name: b.name,
+        code: branchCodes[b.name as keyof typeof branchCodes],
+        address: b.address,
+        contact: b.contact,
+        hours: b.hours,
+        accreditation: b.accreditation,
+        night: b.night,
+        main: !!b.main,
+        morning: b.morning !== false,
+        status: b.status || 'Active'
+      }))
     })
-    console.log('Seeded empty ARC clinic for live encoding')
-    console.log('  Login: superadmin@arc.clinic (password supplied through SEED_ADMIN_PASSWORD)')
-    console.log('  Add real staff under Employees. Stock in inventory before Day 0.')
-    return
-  }
+
+    if (clinicOnly) {
+      const passwordHash = clinicPasswordHash
+      await tx.user.create({
+        data: { name: 'Admin', email: 'superadmin@arc.clinic', passwordHash, role: 'Superadmin', branchName: null, employeeId: null }
+      })
+      console.log('Seeded empty ARC clinic for live encoding')
+      console.log('  Login: superadmin@arc.clinic (password supplied through SEED_ADMIN_PASSWORD)')
+      console.log('  Add real staff under Employees. Stock in inventory before Day 0.')
+    }
+
+  }, { timeout: 60000 })
+  if (clinicOnly) return
 
   await prisma.employee.createMany({
     data: employees.map(e => ({
