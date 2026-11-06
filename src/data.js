@@ -108,7 +108,8 @@ export const itemMaster=[
 {item:'ERIG (serum)',type:'Rabies immunoglobulin (ERIG)',unit:'vials',threshold:5,rule:'Manual in Stock Out. The number of vials depends on the wounds. Saving ERIG on Treatment does not deduct stock.'},
 {item:'Tetanus Toxoid',type:'Tetanus vaccine',unit:'vials',threshold:20,rule:'1 patient treatment = 1 vial.'},
 {item:'Influvac',type:'Flu vaccine',unit:'vials',threshold:4,rule:'1 patient treatment = 1 vial.'},
-{item:'Pneumococcal',type:'Pneumococcal vaccine',unit:'vials',threshold:3,rule:'1 patient treatment = 1 vial.'}]
+{item:'Pneumococcal',type:'Pneumococcal vaccine',unit:'vials',threshold:3,rule:'1 patient treatment = 1 vial.'},
+{item:'Hepatitis B',type:'Hepatitis B vaccine',unit:'vials',threshold:0,rule:'1 patient treatment = 1 vial.'}]
 const stockSeed=[['Guimba','Bioshoot','202507058A1','2028-06-07',112],['Guimba','ChiroRab','CR-2026-041','2028-05-31',48],['Guimba','VaxiRab N','VRN-2026-018','2028-07-31',42],['Guimba','Speeda','SPD-2026-027','2028-08-31',55],['Guimba','Abhayrab','ABH-2026-033','2028-06-30',46],['Guimba','ERIG (serum)','08AR26019','2028-03-31',5],['Guimba','Tetanus Toxoid','25GTOX010D','2028-09-30',91],['Guimba','Influvac','—','2026-03-31',0],['Guimba','Pneumococcal','6120260100','2028-01-11',5],['Cabanatuan','Bioshoot','202507058A1','2028-06-07',38],['Cabanatuan','ERIG (serum)','08AR26019','2028-03-31',4],['Cabanatuan','Tetanus Toxoid','A1701125','2028-08-31',22],['Baloc','Bioshoot','202507058A1','2028-06-07',26],['Baloc','ERIG (serum)','08AR26025','2028-04-30',3],['Baloc','Tetanus Toxoid','A1701125','2028-08-31',30],['Palayan','Bioshoot','202507058A1','2028-06-07',44],['Palayan','ERIG (serum)','08AR26025','2028-04-30',6],['Palayan','Tetanus Toxoid','25GTOX010D','2028-09-30',18],['Talavera','Bioshoot','202507058A1','2028-06-07',52],['Talavera','ERIG (serum)','08AR26018','2026-11-15',2],['Talavera','Tetanus Toxoid','A1700725','2028-02-28',25],['Laur','Bioshoot','202507058A1','2028-06-07',31],['Laur','Tetanus Toxoid','A1700725','2028-02-28',21],['Laur','Pneumococcal','6120260100','2026-10-30',2],['Paniqui','Bioshoot','202507058A1','2028-06-07',18],['Paniqui','Tetanus Toxoid','A1701125','2028-08-31',12],['Rizal','Bioshoot','202507058A1','2028-06-07',27],['Rizal','ERIG (serum)','08AR26019','2028-03-31',2],['Rizal','Tetanus Toxoid','25GTOX010D','2028-09-30',16],['Talugtug','Bioshoot','202507058A1','2028-06-07',14],['Talugtug','Tetanus Toxoid','A1700725','2028-02-28',9],['Gapan','Bioshoot','202507058A1','2028-06-07',21],['Gapan','Tetanus Toxoid','A1701125','2028-08-31',11]]
 export const inventory=stockSeed.map(([branch,item,batch,expiry,stock],i)=>{const m=itemMaster.find(x=>x.item===item);return {id:'STK-'+pad(i+1,3),item,type:m.type,branch,batch,expiry,stock,begin:stock,received:0,used:0,uses:m.usesPerVial?i%m.usesPerVial:0,usesPerVial:m.usesPerVial||0,date:today,shift:'MS',unit:m.unit,threshold:m.threshold}})
 const sigs=['L. Tenorio','J. Torres','K. Diaz','A. Maligaya','C. Valdez']
@@ -144,6 +145,7 @@ export const refundStamp=r=>r&&r.refunded&&r.refunded!=='—'?String(r.refunded)
 export function lineService(p){
   const name=String(p.service||'').replace(/ × \d+$/,'')
   if(!name||name==='Not set yet')return ''
+  if(p.classification==='Other treatment')return name
   const price=servicePrice(name)
   const qty=price&&Number(p.amount)>0?Math.max(1,Math.round(Number(p.amount)/price)):1
   return qty>1?name+' × '+qty:name
@@ -168,6 +170,8 @@ export function groupBills(list){
       registry:first.registry,
       encounterId:first.encounterId,
       patient:first.patient,
+      patientId:first.patientId,
+      otherTreatmentStatus:first.otherTreatmentStatus,
       branch:first.branch,
       date:first.date,
       service:names.length?names.join(', '):'Not set yet',

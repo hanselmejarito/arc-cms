@@ -11,7 +11,8 @@ export const ITEM_MASTER = [
   { item: 'ERIG (serum)', type: 'Rabies immunoglobulin (ERIG)', unit: 'vials', usesPerVial: 0, threshold: 5 },
   { item: 'Tetanus Toxoid', type: 'Tetanus vaccine', unit: 'vials', usesPerVial: 0, threshold: 20 },
   { item: 'Influvac', type: 'Flu vaccine', unit: 'vials', usesPerVial: 0, threshold: 4 },
-  { item: 'Pneumococcal', type: 'Pneumococcal vaccine', unit: 'vials', usesPerVial: 0, threshold: 3 }
+  { item: 'Pneumococcal', type: 'Pneumococcal vaccine', unit: 'vials', usesPerVial: 0, threshold: 3 },
+  { item: 'Hepatitis B', type: 'Hepatitis B vaccine', unit: 'vials', usesPerVial: 0, threshold: 0 }
 ] as const
 
 export const ITEM_NAMES = ITEM_MASTER.map(m => m.item)

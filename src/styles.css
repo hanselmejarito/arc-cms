@@ -350,8 +350,8 @@ html.print-admission .soap-paper .arc-box{width:11px;height:11px}
 
 /* Signature capture actions share the clinic button system. */
 .signature-control{margin:12px 0}
-.signature-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
-.signature-control .button{min-height:44px;padding:10px 16px;cursor:pointer}
+.signature-actions{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.signature-control .button{cursor:pointer}
 .signature-control .button:not(:disabled):hover{filter:brightness(.96);box-shadow:0 2px 6px #173e4b18}
 .signature-control .button:focus-visible{outline:3px solid #2c7898;outline-offset:3px}
 .signature-control .button:disabled{cursor:not-allowed;opacity:.5}
@@ -390,3 +390,17 @@ html.print-rer .arc-signature-slot>span{line-height:1.15}
 .patient-photo-video{display:block;width:100%;height:auto;max-height:min(70vh,520px);background:#111;border-radius:8px;object-fit:contain}
 html.print-admission .soap-paper-sign.has-signature em{flex:none;align-items:center;padding-bottom:0}
 html.print-admission .soap-signature-overlay{max-width:30mm;max-height:16mm}
+
+/* Large signing area for pen tablets; buttons stay outside the canvas. */
+.signature-backdrop{position:fixed;inset:0;z-index:9999;background:#112d2ebf;display:flex;padding:8px}
+.signature-dialog{width:100%;height:100%;max-height:none;box-sizing:border-box;padding:14px 18px;display:flex;flex-direction:column;overflow:hidden}
+.signature-dialog-head{flex:none}
+.signature-dialog-head h2{font-size:22px;margin:0 0 3px}
+.signature-dialog-head p{font-size:14px;margin:0 0 8px}
+.signature-canvas{display:block;box-sizing:border-box;width:100%;flex:1;min-height:0;border:3px solid #245c7b;border-radius:8px;background:#fff;touch-action:none;cursor:crosshair}
+.signature-dialog-actions{flex:none;margin-top:10px}
+@media(max-height:450px){.signature-dialog{padding:6px 10px}.signature-dialog-head h2{font-size:17px}.signature-dialog-head p{font-size:12px;margin:0 0 4px}.signature-dialog-actions{margin-top:4px}}
+
+/* High-contrast visual marker for pen hover and drawing. */
+.signature-pointer{position:fixed;left:0;top:0;z-index:10001;width:18px;height:18px;box-sizing:border-box;border:2px solid #fff;border-radius:50%;background:#142d38;box-shadow:0 0 0 2px #142d38;transform:translate(-50%,-50%);pointer-events:none;visibility:hidden}
+.signature-pointer::after{content:'';position:absolute;width:4px;height:4px;background:#fff;border-radius:50%;left:50%;top:50%;transform:translate(-50%,-50%)}

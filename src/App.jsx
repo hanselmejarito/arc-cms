@@ -10,11 +10,12 @@ import { InventoryPage, InventoryReportPage, PaymentsPage, FinancePage, Referral
 import { EmployeesPage, AttendancePage } from './screens/People'
 import { PayrollPage, PayslipsPage } from './screens/PayrollPages'
 import { ReportsPage, RegistryPage, DOHPage } from './screens/Reports'
+import OtherTreatmentsPage from './screens/OtherTreatments'
 import { BranchesPage, UsersPage, AuditPage, SettingsPage } from './screens/Admin'
 
 const nav=[
 {group:'OVERVIEW',items:[['dashboard','Dashboard',LayoutDashboard]]},
-{group:'PATIENT MANAGEMENT',items:[['patients','Patients',Users],['admissions','Admissions',ClipboardList],['exposure','RER / Animal Bite',HeartPulse],['treatments','Treatment & Vaccination',Syringe],['notes','Progress Notes',FileText],['schedule','Follow-up Schedule',CalendarDays]]},
+{group:'PATIENT MANAGEMENT',items:[['patients','Patients',Users],['admissions','Admissions',ClipboardList],['exposure','RER / Animal Bite',HeartPulse],['treatments','Treatment & Vaccination',Syringe],['other-treatments','Other Treatments',Syringe],['notes','Progress Notes',FileText],['schedule','Follow-up Schedule',CalendarDays]]},
 {group:'INVENTORY',items:[['stock','Current Stock',Package],['receiving','Stock In / Receiving',Package],['usage','Stock Out / Usage',Activity],['adjustments','Stock Adjustments',ClipboardList],['alerts','Expiring / Low Stock',Bell],['invreport','Vaccine Inventory Report',FileText]]},
 {group:'TRANSACTIONS',items:[['payments','Payments / Sales',CreditCard],['finance','Finance Tracker',PiggyBank],['referrals','Branch Referrals',GitBranch],['refunds','Refunds',WalletCards]]},
 {group:'EMPLOYEES',items:[['employees','Employee Records',Users],['attendance','Attendance',Clock3],['payroll','Payroll',WalletCards],['payslips','Payslips',FileText]]},
@@ -22,11 +23,11 @@ const nav=[
 {group:'ADMINISTRATION',items:[['branches','Branches',GitBranch],['users','Users & Roles',ShieldCheck],['audit','Audit Trail',FileClock],['settings','Settings',Settings]]}
 ]
 const titles=Object.fromEntries(nav.flatMap(g=>g.items.map(([id,label])=>[id,label])))
-const clinical=['patients','admissions','exposure','treatments','notes','schedule']
-export const access={'Nurse':['dashboard',...clinical,'stock','receiving','usage','adjustments','alerts','invreport','payments','finance','referrals','refunds','reports','registry','doh','attendance','payslips'],'PhilHealth Officer':['dashboard',...clinical,'referrals','refunds','reports','registry','doh','attendance','payslips'],Secretary:['dashboard','patients','admissions','exposure','treatments','notes','schedule','payments','finance','referrals','refunds','reports','registry','doh','attendance','payslips']}
+const clinical=['patients','admissions','exposure','treatments','other-treatments','notes','schedule']
+export const access={'Nurse':['dashboard',...clinical,'stock','receiving','usage','adjustments','alerts','invreport','payments','finance','referrals','refunds','reports','registry','doh','attendance','payslips'],'PhilHealth Officer':['dashboard',...clinical,'referrals','refunds','reports','registry','doh','attendance','payslips'],Secretary:['dashboard','patients','admissions','exposure','treatments','other-treatments','notes','schedule','payments','finance','referrals','refunds','reports','registry','doh','attendance','payslips']}
 export const can=(role,page)=>role==='Superadmin'||role==='Admin'||!!access[role]?.includes(page)
 const homeBranch={Admin:'Guimba',Nurse:'Guimba','PhilHealth Officer':'Guimba',Secretary:'Guimba'}
-const workspacePages=['dashboard','patients','profile','admissions','exposure','treatments','notes','schedule','stock','receiving','usage','adjustments','alerts','invreport','payments','finance','referrals','refunds','employees','attendance','payroll','payslips','reports','registry','doh','branches','users','audit','settings']
+const workspacePages=['dashboard','patients','profile','admissions','exposure','treatments','other-treatments','notes','schedule','stock','receiving','usage','adjustments','alerts','invreport','payments','finance','referrals','refunds','employees','attendance','payroll','payslips','reports','registry','doh','branches','users','audit','settings']
 function parseRoute(pathname,search){
  const parts=(pathname||'/').replace(/\/+$/,'').split('/').filter(Boolean)
  const focus=search?.get('focus')||null
@@ -162,7 +163,7 @@ export default function App(){
  const ctx={page,go,focus,branch,role,userId:user?.id||'',userName:user?.name||'',employeeId:user?.employeeId||'',patients,setPatients,encounters,setEncounters,doses,setDoses,schedule,inventory,setInventory,ledger,setLedger,received,setReceived,movements,setMovements,payments,setPayments,finance,setFinance,referrals,setReferrals,refunds,setRefunds,attendance,setAttendance,payrollInputs,setPayrollInputs,contributionOverrides,setContributionOverrides,attendanceCorrections,setAttendanceCorrections,overtimeRequests,setOvertimeRequests,employees,setEmployees,users,setUsers,branchMaster,setBranchMaster,timeIn,timeOut,notes,setNotes,activity,notify,patientId,setPatientId,encounterId,setEncounterId,can:p=>can(role,p)}
  if(!ready)return <div className="login-page"><div className="login-right"><p className="card-note">Loading…</p></div></div>
  if(!logged)return <Login onLogin={login} theme={theme} setTheme={setTheme}/>
- const pages={dashboard:Dashboard,patients:PatientsPage,profile:ProfilePage,admissions:AdmissionsPage,exposure:ExposurePage,treatments:TreatmentsPage,notes:NotesPage,schedule:SchedulePage,stock:InventoryPage,receiving:InventoryPage,usage:InventoryPage,adjustments:InventoryPage,alerts:InventoryPage,invreport:InventoryReportPage,payments:PaymentsPage,finance:FinancePage,referrals:ReferralsPage,refunds:RefundsPage,employees:EmployeesPage,attendance:AttendancePage,payroll:PayrollPage,payslips:PayslipsPage,reports:ReportsPage,registry:RegistryPage,doh:DOHPage,branches:BranchesPage,users:UsersPage,audit:AuditPage,settings:SettingsPage}
+ const pages={dashboard:Dashboard,patients:PatientsPage,profile:ProfilePage,admissions:AdmissionsPage,exposure:ExposurePage,treatments:TreatmentsPage,'other-treatments':OtherTreatmentsPage,notes:NotesPage,schedule:SchedulePage,stock:InventoryPage,receiving:InventoryPage,usage:InventoryPage,adjustments:InventoryPage,alerts:InventoryPage,invreport:InventoryReportPage,payments:PaymentsPage,finance:FinancePage,referrals:ReferralsPage,refunds:RefundsPage,employees:EmployeesPage,attendance:AttendancePage,payroll:PayrollPage,payslips:PayslipsPage,reports:ReportsPage,registry:RegistryPage,doh:DOHPage,branches:BranchesPage,users:UsersPage,audit:AuditPage,settings:SettingsPage}
  const Page=pages[page]||Dashboard
  const due=schedule.filter(s=>inScope(s.branch)&&s.status==='Due today').length,pendingRef=referrals.filter(r=>r.status==='Pending acceptance'&&inScope(r.to)).length
  return <div className={'app '+(!sidebar?'sidebar-collapsed':'')}>

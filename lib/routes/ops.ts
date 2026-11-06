@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { ApiRouter } from '../router.js'
 import { z } from 'zod'
 import type { AuditLog, ContributionOverride, Employee, FinanceEntry, InventoryLine, LedgerRow, Movement, OvertimeRequest, PayrollInput, ReceivedRow, Refund, User } from '@prisma/client'
@@ -128,7 +129,7 @@ export async function workspaceExtras(user: AuthedUser) {
     movements: movements.filter(x => inBranch(x.branch)).map(movementClient).sort(byWhen),
     finance: finance.filter(x => inBranch(x.branch)).map(financeClient),
     refunds: refunds.filter(x => inBranch(x.branch)).map(refundClient),
-    employees: employees.filter(e => inBranch(e.branch)).map(employeeClient),
+    employees: employees.filter(e => inBranch(e.branch)).map(e => ({ ...employeeClient(e), ...(!payrollAdmin ? { referenceNumber: undefined } : {}) })),
     attendance: attendance.map(attendanceClient),
     users: users.map(userClient),
     payrollInputs: payrollInputs.filter(row => {
@@ -540,6 +541,37 @@ const refundSchema = z.object({
 opsRouter.post('/refunds', requirePage('refunds'), async (req, res) => {
   const parsed = refundSchema.safeParse(req.body)
   if (!parsed.success) return deny(res, 'Select a payment and enter an amount', 400)
+  if (parsed.data.payment.startsWith('OTP-')) {
+    const otherPay = await prisma.otherTreatmentPayment.findUnique({
+      where: { id: parsed.data.payment }, include: { treatment: { include: { patient: { select: { name: true } } } } }
+    })
+    if (!otherPay) return deny(res, 'Select a paid treatment.', 400)
+    const treatment = otherPay.treatment
+    if (!scopeBranch(req.user!, treatment.branch)) return deny(res, 'This is not your branch')
+    if (treatment.status !== 'Cancelled') return deny(res, 'Cancel the pending treatment before requesting a refund.', 409)
+    const requestedCents = Math.round(parsed.data.amount * 100)
+    if (!Number.isSafeInteger(requestedCents) || Math.abs(parsed.data.amount * 100 - requestedCents) > 0.000001)
+      return deny(res, 'Enter an amount with at most two decimal places.', 400)
+    const result = await prisma.$transaction(async tx => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'other-refund:' + otherPay.id}))`
+      const refunds = await tx.refund.findMany({ where: { payment: otherPay.id, NOT: { status: 'Rejected' } } })
+      const used = refunds.reduce((sum, x) => sum + Math.round(Number(x.amount) * 100), 0)
+      if (requestedCents > otherPay.amountCentavos - used) return null
+      const created = await tx.refund.create({ data: {
+        id: 'RFO-' + randomUUID(), patient: treatment.patient.name, payment: otherPay.id,
+        branch: treatment.branch, amount: requestedCents / 100, reason: parsed.data.reason,
+        requested: parsed.data.requested || clinicDate(), status: 'Pending'
+      } })
+      await tx.auditLog.create({ data: {
+        userId: req.user!.id, userName: req.user!.name + ' (' + req.user!.role + ')',
+        module: 'Refund', action: 'Other treatment refund requested', record: created.id,
+        branch: treatment.branch, time: clinicDate() + ' · ' + nowTime(), device: req.userAgent
+      } })
+      return created
+    })
+    if (!result) return deny(res, 'Refund exceeds the remaining payment amount.', 409)
+    return res.json(refundClient(result))
+  }
   const pay = await prisma.payment.findUnique({ where: { id: parsed.data.payment } })
   if (!pay || pay.status !== 'Paid') return deny(res, 'Select a payment and enter an amount', 400)
   if (!scopeBranch(req.user!, pay.branch)) return deny(res, 'This is not your branch')
@@ -609,6 +641,7 @@ opsRouter.post('/refunds/:id/status', requirePage('refunds'), async (req, res) =
 
 const employeeSchema = z.object({
   name: z.string().trim().min(1),
+  referenceNumber: z.string().trim().max(100).optional(),
   email: z.string().trim().min(1),
   password: z.string().min(8),
   branch: z.string().min(1),
@@ -624,6 +657,7 @@ const employeeSchema = z.object({
 })
 
 opsRouter.post('/employees', requirePage('employees'), async (req, res) => {
+  if (!PEOPLE_ADMINS.includes(req.user!.role as typeof PEOPLE_ADMINS[number])) return deny(res, 'This role cannot access this module')
   const parsed = employeeSchema.safeParse(req.body)
   if (!parsed.success) return deny(res, parsed.error.issues[0]?.message || 'Name, email, and password are required', 400)
   const form = parsed.data
@@ -727,6 +761,7 @@ const employeePatchSchema = employeeSchema.extend({
 })
 
 opsRouter.patch('/employees/:id', requirePage('employees'), async (req, res) => {
+  if (!PEOPLE_ADMINS.includes(req.user!.role as typeof PEOPLE_ADMINS[number])) return deny(res, 'This role cannot access this module')
   const existing = await prisma.employee.findUnique({
     where: { id: req.params.id },
     include: { users: true }
@@ -752,6 +787,7 @@ opsRouter.patch('/employees/:id', requirePage('employees'), async (req, res) => 
       where: { id: existing.id },
       data: {
         name: form.name,
+        referenceNumber: form.referenceNumber ?? existing.referenceNumber,
         branch: form.branch,
         position: form.position,
         role: form.role,
@@ -785,6 +821,7 @@ opsRouter.patch('/employees/:id', requirePage('employees'), async (req, res) => 
   })
   const before = {
     Name: existing.name,
+    'Reference number': existing.referenceNumber,
     Email: primary?.email || '',
     Branch: existing.branch,
     Position: existing.position,
@@ -799,6 +836,7 @@ opsRouter.patch('/employees/:id', requirePage('employees'), async (req, res) => 
   }
   const after = {
     Name: form.name,
+    'Reference number': form.referenceNumber ?? existing.referenceNumber,
     Email: email,
     Branch: form.branch,
     Position: form.position,
@@ -1070,6 +1108,36 @@ opsRouter.post('/attendance/correct', requireAny('attendance'), async (req, res)
     attendance: attendanceClient({ ...saved, user: { employeeId: target?.employeeId || null, name: target?.name || req.user!.name } }),
     correction: attendanceCorrectionClient(entry)
   })
+})
+
+const breakReviewSchema = z.object({
+  attendanceId: z.string().trim().min(1),
+  minutes: z.number().int().min(0).max(60),
+  reason: z.string().trim().min(1).max(500)
+})
+
+opsRouter.post('/attendance/break-review', requirePage('attendance'), async (req, res) => {
+  if (!PEOPLE_ADMINS.includes(req.user!.role as typeof PEOPLE_ADMINS[number])) return deny(res, 'This role cannot access this module')
+  const parsed = breakReviewSchema.safeParse(req.body)
+  if (!parsed.success) return deny(res, 'Enter break minutes between 0 and 60 and a reason.', 400)
+  const row = await prisma.attendance.findUnique({ where: { id: parsed.data.attendanceId }, include: { user: { select: { employeeId: true, name: true } } } })
+  if (!row) return deny(res, 'Attendance record not found.', 404)
+  if (!req.user!.allBranches && row.branch !== req.user!.branchName) return deny(res, 'This is not your branch.')
+  if (!['Muñoz', 'Palayan'].includes(row.branch) || row.date < '2026-11-05') return deny(res, 'This attendance record does not use the flexible-break policy.', 400)
+  const start = toMins(row.clockIn), end = toMins(row.clockOut)
+  if (start == null || end == null || end <= start || parsed.data.minutes > end - start) return deny(res, 'Time In and Time Out must be valid and the break cannot exceed the recorded time.', 400)
+  const now = new Date(), user = req.user!
+  const saved = await prisma.$transaction(async tx => {
+    const changed = await tx.attendance.update({ where: { id: row.id }, data: { reviewedBreakMinutes: parsed.data.minutes, breakReviewedAt: now, breakReviewedBy: user.id } })
+    await tx.auditLog.create({ data: {
+      userId: user.id, userName: user.name + ' (' + user.role + ')', module: 'Attendance', action: 'Meal break reviewed',
+      record: row.id + ' · ' + row.date, oldValue: row.reviewedBreakMinutes == null ? 'Not reviewed' : String(row.reviewedBreakMinutes) + ' min',
+      newValue: parsed.data.minutes + ' min · ' + parsed.data.reason, branch: row.branch,
+      time: clinicDate() + ' · ' + now.toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: 'numeric', minute: '2-digit' }), device: req.userAgent
+    } })
+    return changed
+  })
+  res.json(attendanceClient({ ...saved, user: row.user }))
 })
 
 const payrollInputSchema = z.object({

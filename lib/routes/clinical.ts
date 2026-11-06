@@ -20,6 +20,7 @@ import { issueRegistry, issueTxn, nextPrefixedId, peekRegistry } from '../regist
 import { workspaceExtras } from './ops.js'
 import { readPhoto } from '../photoInput.js'
 import { readSignature } from '../signatureInput.js'
+import { otherPaymentClient } from '../otherTreatment.js'
 
 function optionalPhoto(body: unknown) {
   if (!body || typeof body !== 'object' || !('photo' in body)) return undefined
@@ -50,6 +51,13 @@ clinicalRouter.get('/clinical', requirePage('dashboard'), async (req, res) => {
     prisma.referral.findMany({ orderBy: { date: 'desc' } }),
     prisma.auditLog.findMany({ orderBy: { createdAt: 'desc' }, take: 80 })
   ])
+  const otherPaid = (canPage(user.role, 'payments') || canPage(user.role, 'reports')) ? await prisma.otherTreatment.findMany({
+    where: { ...(user.allBranches ? {} : { branch: user.branchName || '' }), payment: { isNot: null } },
+    include: { patient: { select: { id: true, name: true } }, payment: true }
+  }) : []
+  const standalonePatientIds = user.allBranches ? new Set<string>() : new Set(
+    (await prisma.otherTreatment.findMany({ where: { branch: user.branchName || '' }, select: { patientId: true }, distinct: ['patientId'] })).map(t => t.patientId)
+  )
   const scopedEnc = encounters.filter(e => inScopeEncounter(user, e))
   const payments = await repairStaleOpenBills(scopedEnc, paymentRows)
   const scopedIds = new Set(scopedEnc.map(e => e.id))
@@ -58,7 +66,7 @@ clinicalRouter.get('/clinical', requirePage('dashboard'), async (req, res) => {
     if (!lastByPatient.has(e.patientId)) lastByPatient.set(e.patientId, e.registry)
   }
   const patientRows = patients.map(p => {
-    const hasScopedVisit = scopedEnc.some(e => e.patientId === p.id)
+    const hasScopedVisit = scopedEnc.some(e => e.patientId === p.id) || standalonePatientIds.has(p.id)
     const home = user.allBranches || p.branch === user.branchName
     if (home || hasScopedVisit) return patientClient(p)
     return {
@@ -75,7 +83,9 @@ clinicalRouter.get('/clinical', requirePage('dashboard'), async (req, res) => {
     notes: notes.filter(n => scopedIds.has(n.encounterId) || user.allBranches).map(noteClient),
     payments: (user.allBranches || canPage(user.role, 'payments')
       ? payments.filter(p => user.allBranches || p.branch === user.branchName)
-      : payments.filter(p => scopedIds.has(p.encounterId))).map(paymentClient),
+      : payments.filter(p => scopedIds.has(p.encounterId))).map(paymentClient).concat(
+        otherPaid.filter(t => t.payment !== null).map(t => otherPaymentClient({ ...t, payment: t.payment! }))
+      ),
     referrals: referrals.filter(r => user.allBranches || r.from === user.branchName || r.to === user.branchName).map(referralClient),
     audit: (user.allBranches || ALL_BRANCH_ROLES.includes(user.role) ? auditRows : auditRows.filter(a => a.branch === user.branchName)).map(publicAudit),
     ...extras

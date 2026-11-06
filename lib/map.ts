@@ -300,6 +300,7 @@ export function employeeClient(x: Employee & { users?: Pick<User, 'email'>[] }) 
   const logins = (x.users || []).map(u => u.email)
   return {
     id: x.id,
+    referenceNumber: x.referenceNumber,
     name: x.name,
     branch: x.branch,
     position: x.position,
@@ -344,7 +345,10 @@ export function attendanceClient(x: Attendance & { user?: { employeeId: string |
     source: x.source,
     branch: x.branch,
     device: x.device,
-    corrected: x.corrected
+    corrected: x.corrected,
+    reviewedBreakMinutes: x.reviewedBreakMinutes,
+    breakReviewedAt: x.breakReviewedAt?.toISOString() || null,
+    breakReviewedBy: x.breakReviewedBy
   }
 }
 

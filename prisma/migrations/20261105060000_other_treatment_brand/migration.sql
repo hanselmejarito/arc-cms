@@ -1,0 +1,1 @@
+ALTER TABLE "OtherTreatment" ADD COLUMN "brand" TEXT NOT NULL DEFAULT '';

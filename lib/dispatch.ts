@@ -4,10 +4,14 @@ import { createRes, matchPath, parseCookies, parseQuery, type ApiReq, type Route
 import { authRouter } from './routes/auth.js'
 import { clinicalRouter } from './routes/clinical.js'
 import { opsRouter } from './routes/ops.js'
+import { signatureCorrectionsRouter } from './routes/signatureCorrections.js'
+import { otherTreatmentsRouter } from './routes/otherTreatments.js'
 
 const mounted: { prefix: string; routes: Route[] }[] = [
   { prefix: '/api/auth', routes: authRouter.routes },
   { prefix: '/api', routes: clinicalRouter.routes },
+  { prefix: '/api', routes: signatureCorrectionsRouter.routes },
+  { prefix: '/api', routes: otherTreatmentsRouter.routes },
   { prefix: '/api', routes: opsRouter.routes }
 ]
 
