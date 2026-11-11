@@ -5,7 +5,7 @@ import type { AuditLog, ContributionOverride, Employee, FinanceEntry, InventoryL
 import { prisma } from '../prisma.js'
 import { audit } from '../audit.js'
 import { canAccessBranch, hashPassword, requireAny, requireAuth, requirePage, type AuthedUser } from '../auth.js'
-import { ALL_BRANCH_ROLES, canPage, clinicDate, refundEligible, refundRemaining } from '../clinical.js'
+import { ALL_BRANCH_ROLES, canPage, clinicDate, clinicTime, refundEligible, refundRemaining } from '../clinical.js'
 import { nextId } from '../ids.js'
 import { catchUpBranch, closeShiftOnce } from '../shiftClose.js'
 import { ADJUST_REASONS, ITEM_NAMES, itemMeta } from '../inventory.js'
@@ -28,7 +28,6 @@ const FINANCE_CATS: Record<string, string[]> = {
 const REFUND_APPROVERS = ['Superadmin', 'Admin', 'Nurse', 'PhilHealth Officer', 'Secretary']
 const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/)
 const nowTime = () => new Date().toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })
-const clock = () => new Date().toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit', hour12: false })
 const toMins = (t: string) => {
   const [h, m] = String(t || '').split(':').map(Number)
   return Number.isFinite(h) && Number.isFinite(m) ? h * 60 + m : null
@@ -50,11 +49,12 @@ function shiftEndMins(role: string, shift: string) {
   if (role === 'PhilHealth Officer') return 17 * 60
   return 16 * 60
 }
-function overtimeRoom(role: string, shift: string, clockOut: string) {
+function overtimeRoom(role: string, shift: string, clockOut: string, branch = '', date = '') {
   const out = toMins(clockOut)
-  const end = shiftEndMins(role, shift)
-  if (out == null || out <= end) return 0
-  return Math.round((out - end) / 60 * 100) / 100
+  const policy = ['Muñoz', 'Palayan'].includes(branch) && date >= '2026-11-11' && shift !== 'Night Shift' && shift !== 'NS'
+  const end = policy ? 18 * 60 : shiftEndMins(role, shift), grace = policy ? 15 : 0
+  if (out == null || out <= end + grace) return 0
+  return policy ? Math.round((out - end - grace) / 60 * 10000) / 10000 : Math.round((out - end) / 60 * 100) / 100
 }
 
 function scopeBranch(user: AuthedUser, branch: string) {
@@ -975,21 +975,22 @@ opsRouter.patch('/branches/:name', requirePage('branches'), async (req, res) => 
 
 opsRouter.post('/attendance/in', requirePage('attendance'), async (req, res) => {
   const user = req.user!
+  const instant = new Date(), date = clinicDate(instant), at = clinicTime(instant)
   if (NO_CLOCK_ROLES.includes(user.role)) return deny(res, 'Superadmin does not Time In')
-  const existing = await prisma.attendance.findUnique({ where: { userId_date: { userId: user.id, date: clinicDate() } } })
+  const existing = await prisma.attendance.findUnique({ where: { userId_date: { userId: user.id, date } } })
   if (existing?.clockIn) return deny(res, 'Time In already recorded', 409)
+  if (existing?.nightClockIn) return deny(res, 'Morning Time In cannot start after night duty.', 409)
   const duty = user.employeeId ? (await prisma.employee.findUnique({ where: { id: user.employeeId } }))?.branch : null
   const where = String(req.body.branch || duty || user.branchName || 'Guimba')
   if (!user.allBranches && where !== user.branchName) return deny(res, 'This is not your branch')
   await assertBranch(where)
-  const at = clock()
   const row = existing
     ? await prisma.attendance.update({ where: { id: existing.id }, data: { clockIn: at, branch: where, source: 'Time In button', device: 'Branch workstation' } })
     : await prisma.attendance.create({
       data: {
         id: await nextId(prisma.attendance, 'ATT-', 4),
         userId: user.id,
-        date: clinicDate(),
+        date,
         clockIn: at,
         clockOut: '',
         source: 'Time In button',
@@ -1003,14 +1004,48 @@ opsRouter.post('/attendance/in', requirePage('attendance'), async (req, res) => 
 
 opsRouter.post('/attendance/out', requirePage('attendance'), async (req, res) => {
   const user = req.user!
+  const instant = new Date(), date = clinicDate(instant), at = clinicTime(instant)
   if (NO_CLOCK_ROLES.includes(user.role)) return deny(res, 'Superadmin does not Time Out')
-  const existing = await prisma.attendance.findUnique({ where: { userId_date: { userId: user.id, date: clinicDate() } } })
+  const existing = await prisma.attendance.findUnique({ where: { userId_date: { userId: user.id, date } } })
   if (!existing?.clockIn) return deny(res, 'Time In first', 409)
   if (existing.clockOut) return deny(res, 'Time Out already recorded', 409)
-  const at = clock()
   const row = await prisma.attendance.update({ where: { id: existing.id }, data: { clockOut: at } })
   await audit(req, { module: 'Attendance', action: 'Time Out recorded at ' + at, record: user.name, branch: existing.branch })
   res.json(attendanceClient({ ...row, user: { employeeId: user.employeeId, name: user.name } }))
+})
+
+// A second pair of clock stamps is reserved for night duty at the two branches.
+opsRouter.post('/attendance/night/in', requirePage('attendance'), async (req, res) => {
+  const user = req.user!, instant = new Date(), date = clinicDate(instant), at = clinicTime(instant)
+  if (NO_CLOCK_ROLES.includes(user.role) || !user.employeeId) return deny(res, 'An employee login is required.', 400)
+  const emp = await prisma.employee.findUnique({ where: { id: user.employeeId } })
+  if (!emp || !['Guimba', 'Cabanatuan'].includes(emp.branch)) return deny(res, 'Night duty is available at Guimba and Cabanatuan.', 403)
+  if (!user.allBranches && emp.branch !== user.branchName) return deny(res, 'This is not your branch.', 403)
+  const existing = await prisma.attendance.findUnique({ where: { userId_date: { userId: user.id, date } } })
+  if (existing?.nightClockIn) return deny(res, 'Night Time In already recorded.', 409)
+  if (existing?.clockIn && !existing.clockOut) return deny(res, 'Time Out of the morning shift first.', 409)
+  if (existing?.clockOut && existing.clockOut > at) return deny(res, 'Night Time In cannot precede morning Time Out.', 409)
+  const row = existing
+    ? await prisma.attendance.updateMany({ where: { id: existing.id, nightClockIn: '', nightClockOut: '', ...(existing.clockIn ? { clockOut: existing.clockOut } : { clockIn: '' }) }, data: { nightClockIn: at } }).then(async result => result.count ? prisma.attendance.findUniqueOrThrow({ where: { id: existing.id } }) : null)
+    : await prisma.attendance.create({ data: { id: await nextId(prisma.attendance, 'ATT-', 4), userId: user.id, date, branch: emp.branch, nightClockIn: at, source: 'Time In button', device: 'Branch workstation' } })
+  if (!row) return deny(res, 'Attendance changed. Reload and try again.', 409)
+  await audit(req, { module: 'Attendance', action: 'Night Time In recorded at ' + at, record: user.name, branch: emp.branch })
+  return res.json(attendanceClient({ ...row, user: { employeeId: user.employeeId, name: user.name } }))
+})
+
+opsRouter.post('/attendance/night/out', requirePage('attendance'), async (req, res) => {
+  const user = req.user!, instant = new Date(), date = clinicDate(instant), at = clinicTime(instant)
+  if (NO_CLOCK_ROLES.includes(user.role)) return deny(res, 'Superadmin does not Time Out', 400)
+  const existing = await prisma.attendance.findUnique({ where: { userId_date: { userId: user.id, date } } })
+  if (!existing?.nightClockIn) return deny(res, 'Night Time In first.', 409)
+  if (existing.nightClockOut) return deny(res, 'Night Time Out already recorded.', 409)
+  if (!user.allBranches && existing.branch !== user.branchName) return deny(res, 'This is not your branch.', 403)
+  if (at <= existing.nightClockIn) return deny(res, 'Night Time Out must be after Time In.', 409)
+  const changed = await prisma.attendance.updateMany({ where: { id: existing.id, nightClockIn: existing.nightClockIn, nightClockOut: '' }, data: { nightClockOut: at } })
+  if (!changed.count) return deny(res, 'Attendance changed. Reload and try again.', 409)
+  const row = await prisma.attendance.findUniqueOrThrow({ where: { id: existing.id } })
+  await audit(req, { module: 'Attendance', action: 'Night Time Out recorded at ' + at, record: user.name, branch: row.branch })
+  return res.json(attendanceClient({ ...row, user: { employeeId: user.employeeId, name: user.name } }))
 })
 
 const overtimeFileSchema = z.object({
@@ -1028,9 +1063,10 @@ opsRouter.post('/attendance/overtime', requirePage('attendance'), async (req, re
   const date = clinicDate()
   const attendance = await prisma.attendance.findUnique({ where: { userId_date: { userId: user.id, date } } })
   if (!attendance?.clockOut) return deny(res, 'Time Out first', 400)
-  const room = overtimeRoom(emp.role, emp.shift, attendance.clockOut)
+  const room = overtimeRoom(emp.role, emp.shift, attendance.clockOut, attendance.branch, date)
   if (room <= 0) return deny(res, 'Time Out is still inside the shift. Overtime starts after the shift ends.', 400)
-  const hours = Math.round(parsed.data.hours * 100) / 100
+  const newPolicy = ['Muñoz', 'Palayan'].includes(attendance.branch) && date >= '2026-11-11' && emp.shift !== 'Night Shift' && emp.shift !== 'NS'
+  const hours = newPolicy ? Math.round(parsed.data.hours * 10000) / 10000 : Math.round(parsed.data.hours * 100) / 100
   if (hours > room + 0.001) return deny(res, 'Overtime cannot exceed the time after the shift ends (' + room + ' hours)', 400)
   const existing = await prisma.overtimeRequest.findUnique({ where: { employeeId_date: { employeeId: emp.id, date } } })
   if (existing && existing.status !== 'Pending') return deny(res, 'This request is already decided', 409)
@@ -1066,7 +1102,7 @@ opsRouter.post('/attendance/overtime/:id/decide', requirePage('payroll'), async 
 
 const correctSchema = z.object({
   date: dateStr,
-  field: z.enum(['Time In', 'Time Out']),
+  field: z.enum(['Time In', 'Time Out', 'Night Time In', 'Night Time Out']),
   updated: z.string().min(1),
   reason: z.string().trim().min(1),
   userId: z.string().optional()
@@ -1077,11 +1113,20 @@ opsRouter.post('/attendance/correct', requireAny('attendance'), async (req, res)
   const parsed = correctSchema.safeParse(req.body)
   if (!parsed.success) return deny(res, 'Updated value and reason are required', 400)
   const targetId = parsed.data.userId || req.user!.id
-  const k = parsed.data.field === 'Time In' ? 'clockIn' : 'clockOut'
+  const k = parsed.data.field === 'Time In' ? 'clockIn' : parsed.data.field === 'Time Out' ? 'clockOut' : parsed.data.field === 'Night Time In' ? 'nightClockIn' : 'nightClockOut'
   const row = await prisma.attendance.findUnique({ where: { userId_date: { userId: targetId, date: parsed.data.date } } })
+  if (k.startsWith('night') && (!row || !['Guimba', 'Cabanatuan'].includes(row.branch))) return deny(res, 'A Guimba or Cabanatuan attendance record is required.', 400)
+  if (row && !req.user!.allBranches && row.branch !== req.user!.branchName) return deny(res, 'This is not your branch.', 403)
+  if (k.startsWith('night') && !/^([01]\d|2[0-3]):[0-5]\d$/.test(parsed.data.updated)) return deny(res, 'Enter a valid time.', 400)
+  if (row && k === 'nightClockIn' && row.nightClockOut && parsed.data.updated >= row.nightClockOut) return deny(res, 'Night Time In must be before Night Time Out.', 400)
+  if (row && k === 'nightClockOut' && (!row.nightClockIn || parsed.data.updated <= row.nightClockIn)) return deny(res, 'Night Time Out must be after Night Time In.', 400)
+  if (row && k === 'nightClockIn' && row.clockIn && !row.clockOut) return deny(res, 'Time Out of the morning shift first.', 409)
+  if (row && k === 'nightClockIn' && row.clockOut && parsed.data.updated < row.clockOut) return deny(res, 'Night Time In cannot precede morning Time Out.', 400)
+  if (row && k === 'clockOut' && row.nightClockIn && parsed.data.updated > row.nightClockIn) return deny(res, 'Morning Time Out cannot be after Night Time In.', 400)
+  if (row && k === 'clockIn' && row.nightClockIn && !row.clockOut) return deny(res, 'Correct morning Time Out before Night Time In.', 400)
   const original = row ? row[k] || '—' : '—'
   const saved = row
-    ? await prisma.attendance.update({ where: { id: row.id }, data: { [k]: parsed.data.updated, corrected: true } })
+    ? await prisma.attendance.update({ where: { id: row.id }, data: { [k]: parsed.data.updated, corrected: true, ...(['Muñoz', 'Palayan'].includes(row.branch) && row.date >= '2026-11-11' ? { reviewedBreakMinutes: null, breakReviewedAt: null, breakReviewedBy: null } : {}) } })
     : await prisma.attendance.create({
       data: {
         id: await nextId(prisma.attendance, 'ATT-', 4),
@@ -1126,6 +1171,7 @@ opsRouter.post('/attendance/break-review', requirePage('attendance'), async (req
   if (!['Muñoz', 'Palayan'].includes(row.branch) || row.date < '2026-11-05') return deny(res, 'This attendance record does not use the flexible-break policy.', 400)
   const start = toMins(row.clockIn), end = toMins(row.clockOut)
   if (start == null || end == null || end <= start || parsed.data.minutes > end - start) return deny(res, 'Time In and Time Out must be valid and the break cannot exceed the recorded time.', 400)
+  if (row.date >= '2026-11-11' && parsed.data.minutes > Math.max(0, Math.min(end, 13 * 60) - Math.max(start, 12 * 60))) return deny(res, 'Break cannot exceed the recorded overlap with 12:00–1:00 PM.', 400)
   const now = new Date(), user = req.user!
   const saved = await prisma.$transaction(async tx => {
     const changed = await tx.attendance.update({ where: { id: row.id }, data: { reviewedBreakMinutes: parsed.data.minutes, breakReviewedAt: now, breakReviewedBy: user.id } })
@@ -1164,6 +1210,7 @@ opsRouter.post('/payroll/inputs', requirePage('payroll'), async (req, res) => {
   const { holidayRegular, holidaySpecial, ...form } = parsed.data
   const emp = await prisma.employee.findUnique({ where: { id: form.employeeId } })
   if (!emp) return deny(res, 'Employee not found', 400)
+  if (!emp.payroll) return deny(res, 'Employee is not payroll eligible.', 409)
   if (!req.user!.allBranches && emp.branch !== req.user!.branchName) return deny(res, 'This is not your branch')
   const regular = holidayRegular ?? form.holiday
   const special = Number(holidaySpecial) || 0

@@ -1,4 +1,5 @@
 export const clinicDate = (d = new Date()) => d.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' })
+export const clinicTime = (d = new Date()) => d.toLocaleTimeString('en-GB', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
 export const GRACE_DAYS = 7
 export const SUPERADMIN_ROLE = 'Superadmin'
 export const ADMIN_ROLE = 'Admin'

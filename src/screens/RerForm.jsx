@@ -21,6 +21,45 @@ const paperDays=[
  {day:'D28',title:'DAY 21/28',given:'Anti - Rabies day 21 given',next:'',idOpts:true}
 ]
 
+function ClearPrintSignature({src, className, alt, strengthen = false}){
+ const [prepared,setPrepared]=React.useState(src)
+ React.useEffect(()=>{
+  let cancelled=false
+  const img=new Image()
+  img.onload=()=>{
+   try{
+    const w=img.naturalWidth,h=img.naturalHeight,canvas=document.createElement('canvas')
+    canvas.width=w;canvas.height=h
+    const ctx=canvas.getContext('2d',{willReadFrequently:true})
+    ctx.drawImage(img,0,0)
+    const frame=ctx.getImageData(0,0,w,h),p=frame.data
+    let minX=w,minY=h,maxX=-1,maxY=-1
+    for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+     const i=(y*w+x)*4,alpha=p[i+3],light=(p[i]*0.299+p[i+1]*0.587+p[i+2]*0.114)
+     const ink=Math.round(alpha*Math.max(0,Math.min(1,(245-light)/100)))
+     p[i]=0;p[i+1]=0;p[i+2]=0;p[i+3]=ink
+     if(ink>20){minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y)}
+    }
+    if(maxX<0)return
+    ctx.putImageData(frame,0,0)
+    const pad=Math.max(2,Math.ceil(Math.max(maxX-minX,maxY-minY)*0.03)),sx=Math.max(0,minX-pad),sy=Math.max(0,minY-pad),sw=Math.min(w-sx,maxX-sx+1+pad),sh=Math.min(h-sy,maxY-sy+1+pad)
+    const out=document.createElement('canvas');out.width=sw;out.height=sh
+    out.getContext('2d').drawImage(canvas,sx,sy,sw,sh,0,0,sw,sh)
+    if(strengthen){
+     const scale=360/Math.max(sw,sh),w2=Math.max(1,Math.round(sw*scale)),h2=Math.max(1,Math.round(sh*scale))
+     const base=document.createElement('canvas');base.width=w2;base.height=h2;base.getContext('2d').drawImage(out,0,0,w2,h2)
+     const bold=document.createElement('canvas');bold.width=w2+8;bold.height=h2+8
+     const bctx=bold.getContext('2d');for(let dy=-3;dy<=3;dy++)for(let dx=-3;dx<=3;dx++)if(dx*dx+dy*dy<=9)bctx.drawImage(base,4+dx,4+dy)
+     if(!cancelled)setPrepared(bold.toDataURL('image/png'))
+    }else if(!cancelled)setPrepared(out.toDataURL('image/png'))
+   }catch{if(!cancelled)setPrepared(src)}
+  }
+  img.src=src
+  return ()=>{cancelled=true}
+ },[src,strengthen])
+ return <img className={className} src={prepared} alt={alt||''}/>
+}
+
 function DoseBlock({row,g}){
  const two=/2 sites/i.test(g?.dose||''),one=/1 site/i.test(g?.dose||''),im=/IM/i.test(g?.dose||'')
  const alive=g?.animalStatus==='Alive',lost=g?.animalStatus==='Lost/Stray',dead=g?.animalStatus==='Dead'
@@ -31,7 +70,7 @@ function DoseBlock({row,g}){
    <b className="arc-dose-date">{g?slash(g.date).replaceAll(' ',''):'__/__/26'}</b>
    <small className="arc-dose-time">{g?.time||'__:__'}</small>
    <span className="arc-dose-label arc-vaccinator-label">Vaccinator</span>
-   <em className="arc-vaccinator-name">{g?.vaccinator||'__________'}</em>
+   <span className="arc-vaccinator-signed">{g?.signature&&<ClearPrintSignature src={g.signature} className="arc-vaccinator-signature" alt="Vaccinator signature" strengthen/>}<em className="arc-vaccinator-name">{g?.vaccinator||'__________'}</em></span>
   </div>
   <div className="arc-dose-body">
    <div className="arc-dose-heading"><strong>{row.title}</strong><strong>L / R</strong></div>
@@ -146,7 +185,7 @@ function SoapPaperBlock({n}){
    </div>
   </div>
   <div className={'soap-paper-sign'+(n?.signature?' has-signature':'')}>
-   <div className="soap-signature-space">{n?.signature&&<FittedSignature src={n.signature} alt="Progress note signature" className="soap-signature-overlay"/>}</div>
+   <div className="soap-signature-space">{n?.signature&&<ClearPrintSignature src={n.signature} alt="Progress note signature" className="soap-signature-overlay"/>}</div>
    <em>{n?.staff||''}</em>
    <span>NAME & SIGNATURE</span>
   </div>
@@ -306,7 +345,7 @@ export function RerSheet({e,p,doses}){
      <h3>CONSENT FORM</h3>
      <div className="arc-indent arc-consent-block">
       <div className="arc-sign-name arc-signature-slot">
-       {e.consentSignature&&<img src={e.consentSignature} alt="Admission signature" className="arc-signature-overlay"/>}
+       {e.consentSignature&&<ClearPrintSignature src={e.consentSignature} alt="Admission signature" className="arc-signature-overlay" strengthen/>}
        <span>{e.consent?e.consentBy:''}</span>
       </div>
       <div className="arc-sign-rule" aria-hidden="true"/>
@@ -343,7 +382,7 @@ export function RerSheet({e,p,doses}){
      </div>
      <div className="arc-doc">
       <div className="arc-sign-name arc-signature-slot">
-       {e.doctorSignature&&<img src={e.doctorSignature} alt="Doctor signature" className="arc-signature-overlay"/>}
+       {e.doctorSignature&&<ClearPrintSignature src={e.doctorSignature} alt="Doctor signature" className="arc-signature-overlay" strengthen/>}
        <span>{e.doctor||''}</span>
       </div>
       <div className="arc-sign-rule" aria-hidden="true"/>

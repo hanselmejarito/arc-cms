@@ -1,0 +1,1 @@
+ALTER TABLE "Attendance" ADD COLUMN "nightClockIn" TEXT NOT NULL DEFAULT '', ADD COLUMN "nightClockOut" TEXT NOT NULL DEFAULT '';

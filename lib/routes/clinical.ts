@@ -3,7 +3,7 @@ import { z } from 'zod'
 import type { Encounter, InventoryLine, Movement, Payment, Prisma, Refund } from '@prisma/client'
 import { prisma } from '../prisma.js'
 import { audit, publicAudit } from '../audit.js'
-import { canAccessBranch, requireAuth, requirePage, servicingBranch, type AuthedUser } from '../auth.js'
+import { canAccessBranch, requireAuth, requireAny, requirePage, servicingBranch, type AuthedUser } from '../auth.js'
 import {
   ALL_BRANCH_ROLES, HIGH_RISK_SITES, NURSE_ROLE, ageFrom, blankErig, blankHistory, clinicDate,
   blankProgress, blankTt, canPage, caseInfo, fullName, protocolOf, refundEligible, samePerson, statusOf,
@@ -17,10 +17,11 @@ import {
   paymentClient, referralClient, refundClient
 } from '../map.js'
 import { issueRegistry, issueTxn, nextPrefixedId, peekRegistry } from '../registry.js'
+import { addsOtherOnlyServices, boosterServiceForBrand, isBoosterVaccineLine } from '../billingPolicy.js'
 import { workspaceExtras } from './ops.js'
 import { readPhoto } from '../photoInput.js'
 import { readSignature } from '../signatureInput.js'
-import { otherPaymentClient } from '../otherTreatment.js'
+import { otherPaymentClient, otherPendingClients } from '../otherTreatment.js'
 
 function optionalPhoto(body: unknown) {
   if (!body || typeof body !== 'object' || !('photo' in body)) return undefined
@@ -55,6 +56,13 @@ clinicalRouter.get('/clinical', requirePage('dashboard'), async (req, res) => {
     where: { ...(user.allBranches ? {} : { branch: user.branchName || '' }), payment: { isNot: null } },
     include: { patient: { select: { id: true, name: true } }, payment: true }
   }) : []
+  const unpaidVisitRows = canPage(user.role, 'payments') ? await prisma.otherTreatment.findMany({
+    where: { ...(user.allBranches ? {} : { branch: user.branchName || '' }), visitId: { not: null } },
+    include: { patient: { select: { id: true, name: true } }, payment: true }, orderBy: { reference: 'asc' }
+  }) : []
+  const paidVisitIds = otherPaid.map(t => t.visitId).filter((id): id is string => !!id)
+  const paidVisitServices = paidVisitIds.length ? await prisma.otherTreatment.findMany({ where: { visitId: { in: paidVisitIds } }, select: { visitId: true, service: true }, orderBy: { reference: 'asc' } }) : []
+  const otherPending = otherPendingClients(unpaidVisitRows)
   const standalonePatientIds = user.allBranches ? new Set<string>() : new Set(
     (await prisma.otherTreatment.findMany({ where: { branch: user.branchName || '' }, select: { patientId: true }, distinct: ['patientId'] })).map(t => t.patientId)
   )
@@ -81,11 +89,11 @@ clinicalRouter.get('/clinical', requirePage('dashboard'), async (req, res) => {
     encounters: scopedEnc.map(encounterClient),
     doses: doses.filter(d => scopedIds.has(d.encounterId) || d.branch === user.branchName || user.allBranches).map(doseClient),
     notes: notes.filter(n => scopedIds.has(n.encounterId) || user.allBranches).map(noteClient),
-    payments: (user.allBranches || canPage(user.role, 'payments')
+    payments: [...(user.allBranches || canPage(user.role, 'payments')
       ? payments.filter(p => user.allBranches || p.branch === user.branchName)
-      : payments.filter(p => scopedIds.has(p.encounterId))).map(paymentClient).concat(
-        otherPaid.filter(t => t.payment !== null).map(t => otherPaymentClient({ ...t, payment: t.payment! }))
-      ),
+      : payments.filter(p => scopedIds.has(p.encounterId))).map(paymentClient),
+        ...otherPaid.filter(t => t.payment !== null).map(t => otherPaymentClient({ ...t, service: t.visitId ? paidVisitServices.filter(x => x.visitId === t.visitId).map(x => x.service).join(' + ') : t.service, payment: t.payment! })), ...otherPending
+      ],
     referrals: referrals.filter(r => user.allBranches || r.from === user.branchName || r.to === user.branchName).map(referralClient),
     audit: (user.allBranches || ALL_BRANCH_ROLES.includes(user.role) ? auditRows : auditRows.filter(a => a.branch === user.branchName)).map(publicAudit),
     ...extras
@@ -110,8 +118,8 @@ const patientSchema = z.object({
   birthday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   sex: z.enum(['Female', 'Male']),
   contact: z.string().trim().min(1, 'Cellphone number is required'),
-  address: z.string().optional().default(''),
-  municipality: z.string().optional().default(''),
+  address: z.string().trim().min(1, 'Address is required'),
+  municipality: z.string().trim().min(1, 'Municipality is required'),
   municipalityOther: z.string().optional().default(''),
   guardian: z.string().optional().default(''),
   senior: z.boolean().optional().default(false),
@@ -120,6 +128,9 @@ const patientSchema = z.object({
   philhealth: z.boolean().optional().default(false),
   branch: z.string().min(1)
 })
+
+const hasPatientAddress = (p: { address?: string | null, municipality?: string | null, municipalityOther?: string | null }) =>
+  !!(p.address?.trim() && p.municipality?.trim() && (p.municipality !== 'Others' || p.municipalityOther?.trim()))
 
 clinicalRouter.get('/patients/match', requirePage('admissions'), async (req, res) => {
   const last = String(req.query.last || ''), first = String(req.query.first || '')
@@ -143,11 +154,12 @@ clinicalRouter.get('/patients/match', requirePage('admissions'), async (req, res
 
 clinicalRouter.post('/patients', requirePage('patients'), async (req, res) => {
   const parsed = patientSchema.safeParse(req.body)
-  if (!parsed.success) return res.status(400).json({ error: 'Last name, first name, birthday, gender and cellphone are required' })
+  if (!parsed.success) return res.status(400).json({ error: 'Last name, first name, birthday, gender, cellphone, address and municipality are required. Specify the municipality when Others is selected.' })
   let photo: string | null | undefined
   try { photo = optionalPhoto(req.body) }
   catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : 'Choose a valid patient photo.' }) }
   const form = parsed.data
+  if (!hasPatientAddress(form)) return res.status(400).json({ error: 'Address and municipality are required. Specify the municipality when Others is selected.' })
   if (!req.user!.allBranches && form.branch !== req.user!.branchName) {
     return res.status(403).json({ error: 'This is not your branch' })
   }
@@ -189,13 +201,14 @@ clinicalRouter.patch('/patients/:id', requirePage('patients'), async (req, res) 
     birthday: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
     sex: z.enum(['Female', 'Male']).optional()
   }).safeParse(req.body)
-  if (!parsed.success) return res.status(400).json({ error: 'Last name, first name, birthday and gender are required' })
+  if (!parsed.success) return res.status(400).json({ error: 'Enter valid patient details, including address and municipality.' })
   let photo: string | null | undefined
   try { photo = optionalPhoto(req.body) }
   catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : 'Choose a valid patient photo.' }) }
   const existing = await prisma.patient.findUnique({ where: { id: req.params.id } })
   if (!existing) return res.status(404).json({ error: 'Patient not found' })
   const next = { ...existing, ...parsed.data }
+  if (!hasPatientAddress(next)) return res.status(400).json({ error: 'Address and municipality are required. Specify the municipality when Others is selected.' })
   const age = ageFrom(next.birthday)
   const turnOnPh = !existing.philhealth && !!next.philhealth
   const result = await prisma.$transaction(async tx => {
@@ -263,7 +276,7 @@ const admitSchema = z.object({
 
 clinicalRouter.post('/admissions', requirePage('admissions'), async (req, res) => {
   const parsed = admitSchema.safeParse(req.body)
-  if (!parsed.success) return res.status(400).json({ error: 'Incomplete admission' })
+  if (!parsed.success) return res.status(400).json({ error: 'Incomplete admission. Address and municipality are required for a new patient.' })
   const { mode, visit } = parsed.data
   const user = req.user!
   if (!user.allBranches && visit.branch !== user.branchName) {
@@ -284,8 +297,9 @@ clinicalRouter.post('/admissions', requirePage('admissions'), async (req, res) =
   if (mode === 'New patient') {
     try { photo = optionalPhoto(req.body.patient) }
     catch (error) { return res.status(400).json({ error: error instanceof Error ? error.message : 'Choose a valid patient photo.' }) }
-    if (!parsed.data.patient) return res.status(400).json({ error: 'Last name, first name, birthday, gender and cellphone are required' })
+    if (!parsed.data.patient) return res.status(400).json({ error: 'Last name, first name, birthday, gender, cellphone, address and municipality are required. Specify the municipality when Others is selected.' })
     const form = parsed.data.patient
+    if (!hasPatientAddress(form)) return res.status(400).json({ error: 'Address and municipality are required. Specify the municipality when Others is selected.' })
     const all = await prisma.patient.findMany()
     const hit = all.find(p => samePerson(p, form))
     if (hit) {
@@ -317,6 +331,8 @@ clinicalRouter.post('/admissions', requirePage('admissions'), async (req, res) =
       })
     }
   }
+
+  if (patient && !hasPatientAddress(patient)) return res.status(400).json({ error: 'Update the patient address and municipality in their patient profile before creating a new admission.' })
 
   const result = await prisma.$transaction(async tx => {
     if (mode === 'New patient' && parsed.data.patient) {
@@ -421,8 +437,8 @@ clinicalRouter.post('/admissions', requirePage('admissions'), async (req, res) =
   })
 })
 
-function openBillLines(enc: { billing: string, booster: boolean, preExp: boolean, category: string }) {
-  if (enc.booster) return [{ service: 'Booster dose', price: 750, status: 'Pending' as const, remarks: 'Not yet paid' }]
+function openBillLines(enc: { billing: string, booster: boolean, preExp: boolean, category: string, brand: string }) {
+  if (enc.booster) { const service = boosterServiceForBrand(enc.brand); return service ? [{ service, price: service === 'Speeda' ? 1500 : 750, status: 'Pending' as const, remarks: 'Not yet paid' }] : [] }
   if (enc.billing === 'PhilHealth') return [{ service: 'Anti-rabies vaccine', price: 0, status: 'Not billed' as const, remarks: '₱0 · PhilHealth' }]
   if (enc.billing === 'For PhilHealth') return [{ service: 'Anti-rabies vaccine', price: 0, status: 'Not billed' as const, remarks: 'Not billed · give Day 0 then refer for PhilHealth' }]
   if (enc.billing && enc.billing !== 'Walk-in') return []
@@ -455,6 +471,16 @@ function needsOpenBillRewrite(enc: Encounter, rows: Payment[]) {
   const specs = openBillLines(enc)
   if (!specs.length) return false
   const open = rows.filter(p => p.status === 'Pending' || p.status === 'Not billed')
+  if (enc.booster) {
+    const vaccine = open.filter(p => isBoosterVaccineLine(p.service))
+    if (!vaccine.length) return true
+    if (vaccine.length > 1) return false
+    const row = vaccine[0]
+    if (row.service === specs[0].service && row.status === 'Pending' && Number(row.amount) > 0) return false
+    const previousDefault = row.service === 'Speeda' ? 1500 : row.service === 'Not set yet' ? 0 : 750
+    const unchangedDefault = Number(row.amount) === previousDefault || (row.status === 'Not billed' && Number(row.amount) === 0)
+    return unchangedDefault && !openBillsMatch(vaccine, specs)
+  }
   return !openBillsMatch(open, specs)
 }
 
@@ -480,6 +506,15 @@ async function syncOpenBill(tx: Prisma.TransactionClient, _before: Encounter, up
   const specs = openBillLines(updated)
   const open = rows.filter(p => p.status === 'Pending' || p.status === 'Not billed')
   const txn = rows.find(p => p.txn)?.txn || await issueTxn(tx, updated.branch, updated.date)
+  if (updated.booster) {
+    const vaccine = open.filter(p => isBoosterVaccineLine(p.service))
+    if (vaccine.length > 1) return rows
+    const spec = specs[0]
+    const existingVaccine = vaccine[0]
+    const data = { registry: updated.registry, encounterId: updated.id, patient: patientName || rows[0]?.patient || '', branch: updated.branch, date: updated.date, service: spec.service, classification: 'Walk-in', amount: spec.price, method: '—', reference: '—', status: 'Pending', remarks: spec.remarks, txn }
+    const saved = existingVaccine ? await tx.payment.update({ where: { id: existingVaccine.id }, data: { service: data.service, amount: data.amount, classification: data.classification, status: data.status } }) : await tx.payment.create({ data: { id: await nextPrefixedId(tx, 'Payment', 'PAY-'), ...data } })
+    return [...rows.filter(p => p.id !== existingVaccine?.id), saved]
+  }
   if (open.length) await tx.payment.deleteMany({ where: { id: { in: open.map(p => p.id) } } })
   const created: Payment[] = []
   for (const spec of specs) {
@@ -510,6 +545,12 @@ clinicalRouter.patch('/encounters/:id', requirePage('exposure'), async (req, res
   if (!existing) return res.status(404).json({ error: 'Admission not found' })
   if (!inScopeEncounter(req.user!, existing)) return res.status(403).json({ error: 'This is not your branch' })
   const body = req.body as Record<string, unknown>
+  const day0Input = body.day0 as { given?: boolean; signature?: unknown; signatureMethod?: unknown } | undefined
+  if (day0Input?.signature) {
+    if (!day0Input.given) return res.status(400).json({ error: 'Record Day 0 to save the vaccinator signature.' })
+    try { readSignature(day0Input.signature, day0Input.signatureMethod) } catch { return res.status(400).json({ error: 'Choose a valid vaccinator signature.' }) }
+  }
+  if (body.rer === true && (body.booster === true || (body.booster !== false && existing.booster)) && !boosterServiceForBrand(typeof body.brand === 'string' ? body.brand : existing.brand)) return res.status(400).json({ error: 'Select the ARV brand before saving a booster RER.' })
   if (body.site && HIGH_RISK_SITES.has(String(body.site))) body.category = 'III'
   if (body.category === 'III' && !body.booster && !body.preExp && !existing.booster) body.rig = body.rig || 'ERIG'
   const becomingBooster = body.booster === true
@@ -661,10 +702,10 @@ clinicalRouter.patch('/encounters/:id', requirePage('exposure'), async (req, res
     await audit(req, { module: 'RER', action: 'RER saved for ' + result.updated.registry, record: result.updated.registry, branch: servicing })
     if (signatureToSave) await audit(req, { module: 'Consent', action: 'Admission signature recorded', record: result.updated.registry, branch: servicing })
     if (doctorSignatureToSave) await audit(req, { module: 'RER', action: 'Doctor signature recorded (' + body.doctorSignatureMethod + ')', record: result.updated.registry, branch: servicing })
-    const day0 = body.day0 as { given?: boolean; dose?: string; time?: string; side?: string; vaccinator?: string; batch?: string; animalStatus?: string } | undefined
+    const day0 = body.day0 as { given?: boolean; dose?: string; time?: string; side?: string; vaccinator?: string; batch?: string; animalStatus?: string; signature?: string; signatureMethod?: 'pen' | 'upload' } | undefined
     const vaccinator = String(day0?.vaccinator || body.vaccinator || '')
     const auto = day0?.given === true
-      ? await autoDay0Extras(result.updated, req.user!.name, vaccinator, day0)
+      ? await autoDay0Extras(result.updated, req.user!.name, vaccinator, day0, req.user!.id)
       : {}
     if (auto.dose) {
       await audit(req, { module: 'Treatment', action: 'Day 0 recorded with RER · ' + result.updated.registry, record: result.updated.registry, branch: servicing })
@@ -690,12 +731,16 @@ const doseSchema = z.object({
   side: z.enum(['L', 'R']),
   animalStatus: z.enum(['Alive', 'Lost/Stray', 'Dead']),
   vaccinator: z.string().min(1),
-  batch: z.string().optional().default('')
+  batch: z.string().optional().default(''),
+  signature: z.string().max(350000).optional(),
+  signatureMethod: z.enum(['pen','upload']).optional()
 })
 
 clinicalRouter.post('/encounters/:id/doses', requirePage('treatments'), async (req, res) => {
   const parsed = doseSchema.safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ error: 'Incomplete dose' })
+  let doseSignature: ReturnType<typeof readSignature>
+  try { doseSignature = readSignature(parsed.data.signature, parsed.data.signatureMethod) } catch { return res.status(400).json({ error: 'Choose a valid vaccinator signature.' }) }
   const enc = await prisma.encounter.findUnique({ where: { id: req.params.id } })
   if (!enc) return res.status(404).json({ error: 'Admission not found' })
   if (!inScopeEncounter(req.user!, enc)) return res.status(403).json({ error: 'This is not your branch' })
@@ -735,7 +780,7 @@ clinicalRouter.post('/encounters/:id/doses', requirePage('treatments'), async (r
     }
   }
   try {
-    const result = await prisma.$transaction(async tx => createDoseInTx(tx, enc, parsed.data, req.user!.name, doses))
+    const result = await prisma.$transaction(async tx => createDoseInTx(tx, enc, { ...parsed.data, ...(doseSignature ? { signature: doseSignature.image, signatureMethod: doseSignature.method as 'pen' | 'upload', recordedBy: req.user!.id } : {}) }, req.user!.name, doses))
     await audit(req, { module: 'Treatment', action: 'Recorded ' + parsed.data.day + ' · ' + enc.registry, record: enc.registry, branch: servicingBranch(enc) })
     res.json({
       ...doseClient(result.created),
@@ -749,6 +794,32 @@ clinicalRouter.post('/encounters/:id/doses', requirePage('treatments'), async (r
   }
 })
 
+clinicalRouter.post('/encounters/:id/doses/:day/signature', requireAny('exposure', 'treatments'), async (req, res) => {
+  const enc = await prisma.encounter.findUnique({ where: { id: req.params.id } })
+  if (!enc) return res.status(404).json({ error: 'Admission not found.' })
+  const existing = await prisma.dose.findFirst({ where: { encounterId: enc.id, day: req.params.day } })
+  if (!existing) return res.status(404).json({ error: 'Record the dose first.' })
+  if (!req.user!.allBranches && existing.branch !== req.user!.branchName) return res.status(403).json({ error: 'This is not your branch.' })
+  const parsed = z.object({ image: z.string().min(1).max(350000), method: z.enum(['pen','upload']), expectedImage: z.string().max(350000).nullable(), reason: z.string().trim().max(500).default('') }).safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ error: 'Enter a valid signature.' })
+  let signature
+  try { signature = readSignature(parsed.data.image, parsed.data.method) } catch { return res.status(400).json({ error: 'Choose a valid signature image.' }) }
+  if (!signature) return res.status(400).json({ error: 'Enter a signature.' })
+  if ((existing.signature || null) !== parsed.data.expectedImage) return res.status(409).json({ error: 'The signature changed. Reload and try again.' })
+  if (existing.signature && !parsed.data.reason) return res.status(400).json({ error: 'Enter a reason for replacing the signature.' })
+  if (existing.signature === signature.image) return res.status(400).json({ error: 'Choose a different signature.' })
+  const user = req.user!, time = new Date()
+  const result = await prisma.$transaction(async tx => {
+    const changed = await tx.dose.updateMany({ where: { id: existing.id, signature: existing.signature, vaccinator: existing.vaccinator }, data: { signature: signature!.image, signatureMethod: signature!.method, signedAt: time, recordedBy: user.id } })
+    if (!changed.count) return null
+    if (existing.signature) await tx.signatureCorrection.create({ data: { kind: 'vaccinator', recordId: existing.id, encounterId: enc.id, previousImage: existing.signature, previousSigner: existing.vaccinator, previousMethod: existing.signatureMethod, previousSignedAt: existing.signedAt, previousRecordedBy: existing.recordedBy, newSigner: existing.vaccinator, newMethod: signature!.method, reason: parsed.data.reason, correctedById: user.id, correctedByName: user.name } })
+    await tx.auditLog.create({ data: { userId: user.id, userName: user.name + ' (' + user.role + ')', module: 'Signature', action: existing.signature ? 'Vaccinator signature corrected' : 'Vaccinator signature recorded', record: enc.registry + ' · ' + existing.day, branch: existing.branch, oldValue: '', newValue: existing.signature ? parsed.data.reason : 'Signature recorded', time: clinicDate() + ' · ' + time.toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' }), device: req.userAgent } })
+    return tx.dose.findUniqueOrThrow({ where: { id: existing.id } })
+  })
+  if (!result) return res.status(409).json({ error: 'The signature or vaccinator changed. Reload and try again.' })
+  return res.json(doseClient(result))
+})
+
 clinicalRouter.patch('/encounters/:id/doses/:day', requirePage('treatments'), async (req, res) => {
   const parsed = doseSchema.omit({ day: true }).safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ error: 'Incomplete dose' })
@@ -758,6 +829,8 @@ clinicalRouter.patch('/encounters/:id/doses/:day', requirePage('treatments'), as
   const servicing = servicingBranch(enc)
   const existing = await prisma.dose.findFirst({ where: { encounterId: enc.id, day: req.params.day } })
   if (!existing) return res.status(404).json({ error: 'Dose not found' })
+  if (parsed.data.signature) return res.status(400).json({ error: 'Use the signature correction controls for a recorded dose.' })
+  if (existing.signature && existing.vaccinator !== parsed.data.vaccinator) return res.status(409).json({ error: 'The vaccinator cannot be changed while a signature is recorded.' })
   const nurse = await prisma.employee.findFirst({
     where: { name: parsed.data.vaccinator, branch: servicing, role: NURSE_ROLE, status: 'Active' }
   })
@@ -856,7 +929,8 @@ async function autoDay0Extras(
   enc: Encounter,
   by: string,
   vaccinator?: string,
-  day0?: { dose?: string; time?: string; side?: string; vaccinator?: string; batch?: string; animalStatus?: string }
+  day0?: { dose?: string; time?: string; side?: string; vaccinator?: string; batch?: string; animalStatus?: string; signature?: string; signatureMethod?: 'pen' | 'upload' },
+  recordedBy?: string
 ): Promise<AutoDay0Extras> {
   try {
     return await prisma.$transaction(async tx => {
@@ -877,7 +951,10 @@ async function autoDay0Extras(
       const servicing = servicingBranch(enc)
       const nurse = await resolveVaccinator(tx, servicing, day0.vaccinator || vaccinator, by)
       if (!nurse) throw new Error('No Nurse at ' + servicing + ' · add an employee first')
+      if (day0.signature && nurse.name !== day0.vaccinator) throw new Error('No Nurse matching the selected vaccinator at ' + servicing)
+      const signature = day0.signature ? readSignature(day0.signature, day0.signatureMethod) : null
       const result = await createDoseInTx(tx, enc, {
+        ...(signature ? { signature: signature.image, signatureMethod: signature.method as 'pen' | 'upload', recordedBy } : {}),
         day: 'D0',
         date: enc.date,
         time: day0.time || enc.time || new Date().toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
@@ -946,10 +1023,17 @@ const SERVICE_PRICES: Record<string, number> = {
   Speeda: 1500,
   'Hepatitis B': 1100,
   'Pneumococcal vaccine': 2500,
+  Flu: 1600,
   'Flu Regular': 1600,
   'Flu Student': 1500,
   'Flu Senior-PWD': 1350
 }
+
+const rerPriceAdjustmentSchema = z.object({
+  reason: z.string().trim().max(500).optional().default(''),
+  discountType: z.enum(['Senior','PWD']).optional(),
+  items: z.array(z.object({ service: z.string().trim().min(1), qty: z.literal(1), unitPriceCentavos: z.number().int().positive().max(100000000), pendingPaymentId: z.string().min(1).optional(), expectedAmountCentavos: z.number().int().nonnegative().optional() })).min(1).max(25)
+}).refine(x => new Set(x.items.map(i => i.pendingPaymentId).filter(Boolean)).size === x.items.filter(i => i.pendingPaymentId).length, 'Duplicate payment line.')
 
 clinicalRouter.post('/payments', requirePage('payments'), async (req, res) => {
   const encounterId = String(req.body.encounterId || '')
@@ -958,6 +1042,7 @@ clinicalRouter.post('/payments', requirePage('payments'), async (req, res) => {
   if (!req.user!.allBranches && enc.branch !== req.user!.branchName && servicingBranch(enc) !== req.user!.branchName) {
     return res.status(403).json({ error: 'This is not your branch' })
   }
+  if (enc.booster && !boosterServiceForBrand(enc.brand)) return res.status(400).json({ error: 'Select the ARV brand in the RER before collecting a booster payment.' })
   const intent = req.body.intent === 'update' ? 'update' : 'collect'
   const booster = enc.booster
   const classification = booster ? 'Walk-in' : String(req.body.classification || enc.billing || enc.patient.classification)
@@ -967,7 +1052,11 @@ clinicalRouter.post('/payments', requirePage('payments'), async (req, res) => {
   const remarks = String(req.body.remarks || '')
   const method = free ? (classification === 'PhilHealth' ? 'PhilHealth' : '—') : String(req.body.method || 'Cash')
   const reference = free ? '—' : String(req.body.reference || '—')
+  const priceInput = req.body.priceAdjustment == null ? null : rerPriceAdjustmentSchema.safeParse(req.body.priceAdjustment)
+  if (priceInput && !priceInput.success) return res.status(400).json({ error: 'Enter a valid price and quantity for every service.' })
+  if (priceInput && (intent !== 'collect' || free)) return res.status(400).json({ error: 'Custom prices are available when collecting a paid bill.' })
   const saved = await prisma.$transaction(async tx => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'rer-payment:' + enc.id}))`
     if (booster && enc.billing !== 'Walk-in') {
       await tx.encounter.update({ where: { id: enc.id }, data: { billing: 'Walk-in', rig: '', erig: blankErig } })
     }
@@ -975,7 +1064,67 @@ clinicalRouter.post('/payments', requirePage('payments'), async (req, res) => {
       where: { encounterId: enc.id, status: 'Pending' },
       orderBy: { createdAt: 'asc' }
     })
+    const requestedLines = Array.isArray(req.body.lines) ? req.body.lines : req.body.service ? [{ service: req.body.service, qty: 1 }] : []
+    const requestedVaccine = (requestedLines as Array<{ service?: unknown; qty?: unknown }>).filter(line => Number(line.qty) > 0 && isBoosterVaccineLine(String(line.service || '')))
+    if (booster && intent === 'collect' && pendings.filter(p => isBoosterVaccineLine(p.service) && Number(p.amount) > 0).length > 1) throw new Error('Review duplicate ARV lines on the booster bill before payment.')
+    if (booster && pendings.some(p => p.service === 'ERIG (serum)' && Number(p.amount) > 0) && (intent === 'collect' || requestedLines.some(line => String((line as { service?: unknown }).service || '') === 'ERIG (serum)'))) throw new Error('Review the existing ERIG line on the booster bill before payment.')
+    if (booster && ((requestedLines.length > 0 && requestedVaccine.length !== 1) || requestedVaccine.some(line => String(line.service || '').split(' × ')[0] !== boosterServiceForBrand(enc.brand)))) throw new Error('Use the ARV charge for the selected booster brand.')
+    if (booster && intent === 'collect' && pendings.some(p => isBoosterVaccineLine(p.service) && Number(p.amount) > 0 && p.service !== boosterServiceForBrand(enc.brand))) throw new Error('The booster bill does not match the selected ARV brand. Reload and review it before payment.')
+    if (booster && intent === 'collect' && pendings.some(p => isBoosterVaccineLine(p.service) && Number(p.amount) > 0 && p.service === boosterServiceForBrand(enc.brand) && !Number.isInteger(Number(p.amount) / SERVICE_PRICES[p.service]))) throw new Error('Review the existing booster amount before payment.')
+    if (addsOtherOnlyServices(requestedLines as Array<{ service?: unknown; qty?: unknown }>, pendings, SERVICE_PRICES)) throw new Error('Record Flu, Hepatitis B and Pneumococcal in Other Treatments.')
     const txn = pendings[0]?.txn || (await tx.payment.findFirst({ where: { encounterId: enc.id, txn: { not: '' } }, orderBy: { createdAt: 'asc' } }))?.txn || await issueTxn(tx, branch, date)
+    if (intent === 'collect' && priceInput?.success) {
+      if (!enc.rer) throw new Error('Save the RER before collecting. The bill is not ready.')
+      const due = pendings.filter(p => Number(p.amount) > 0)
+      const items = priceInput.data.items
+      if (priceInput.data.discountType && items.some(item => item.service === 'Flu Senior-PWD' || item.service === 'Flu Student')) throw new Error('Use Flu for a Senior/PWD discount; legacy or student prices need review.')
+      if (!Array.isArray(req.body.lines) || req.body.lines.length !== items.length || items.some((item, i) => { const source = req.body.lines as Array<{ service?: unknown; qty?: unknown }>; return String(source[i]?.service || '').replace(/ × \d+$/, '') !== item.service || Number(source[i]?.qty) !== item.qty })) throw new Error('The bill changed. Reload and try again.')
+      if (addsOtherOnlyServices(items, pendings, SERVICE_PRICES)) throw new Error('Record Flu, Hepatitis B and Pneumococcal in Other Treatments.')
+      const current = new Map(due.map(row => [row.id, row]))
+      const supplied = items.filter(item => item.pendingPaymentId)
+      if (supplied.length !== due.length || supplied.some(item => !current.has(item.pendingPaymentId!))) throw new Error('The bill changed. Reload and try again.')
+      const additional = new Set<string>(), changed: string[] = []
+      for (const item of items) {
+        if (!SERVICE_PRICES[item.service] || (booster && item.service === 'ERIG (serum)')) throw new Error('Select a valid RER service.')
+        const lineAmount = Math.round(item.unitPriceCentavos * item.qty)
+        if (!Number.isSafeInteger(lineAmount) || lineAmount <= 0 || lineAmount > 100000000) throw new Error('Enter a valid price and quantity for every service.')
+        const existing = item.pendingPaymentId ? current.get(item.pendingPaymentId) : undefined
+        if (existing) {
+          const oldCents = Math.round(Number(existing.amount) * 100)
+          const oldQty = 1
+          if (item.expectedAmountCentavos !== oldCents || existing.service.replace(/ × \d+$/, '') !== item.service || item.qty !== oldQty) throw new Error('The bill changed. Reload and try again.')
+          const originalUnit = oldCents
+          if (item.unitPriceCentavos === originalUnit && lineAmount !== oldCents) throw new Error('The bill changed. Reload and review the quantity and price.')
+          if (item.unitPriceCentavos !== originalUnit) changed.push(item.service + ': ' + originalUnit + ' → ' + item.unitPriceCentavos)
+        } else {
+          if (item.pendingPaymentId || item.expectedAmountCentavos != null || due.some(row => row.service === item.service) || additional.has(item.service)) throw new Error('The bill changed. Reload and try again.')
+          additional.add(item.service)
+          const defaultUnit = SERVICE_PRICES[item.service] * 100
+          if (item.unitPriceCentavos !== defaultUnit) changed.push(item.service + ': ' + defaultUnit + ' → ' + item.unitPriceCentavos)
+        }
+      }
+      if (changed.length && !priceInput.data.reason) throw new Error('Enter a reason for the price correction.')
+      const txnForPayment = due.length ? txn : await issueTxn(tx, branch, date)
+      const paidRows: Payment[] = []
+      let accumulatedGross = 0
+      for (const item of items) {
+        const grossCentavos = Math.round(item.unitPriceCentavos * item.qty)
+        const discountCentavos = priceInput.data.discountType ? Math.round((accumulatedGross + grossCentavos) * 0.2) - Math.round(accumulatedGross * 0.2) : 0
+        accumulatedGross += grossCentavos
+        const amount = (grossCentavos - discountCentavos) / 100
+        const discountType = priceInput.data.discountType || null
+        const existing = item.pendingPaymentId ? current.get(item.pendingPaymentId) : undefined
+        if (existing) {
+          const claim = await tx.payment.updateMany({ where: { id: existing.id, status: 'Pending', amount: existing.amount }, data: { amount, unitPriceCentavos: item.unitPriceCentavos, quantity: item.qty, discountType, discountCentavos, status: 'Paid', method, reference, date, branch, remarks: remarks || existing.remarks } })
+          if (!claim.count) throw new Error('The bill changed. Reload and try again.')
+          paidRows.push(await tx.payment.findUniqueOrThrow({ where: { id: existing.id } }))
+        } else {
+          paidRows.push(await tx.payment.create({ data: { id: await nextPrefixedId(tx, 'Payment', 'PAY-'), registry: enc.registry, encounterId: enc.id, patient: enc.patient.name, branch, date, service: item.service, classification, amount, unitPriceCentavos: item.unitPriceCentavos, quantity: item.qty, discountType, discountCentavos, method, reference, status: 'Paid', remarks: remarks || 'Follow-up', txn: txnForPayment } }))
+        }
+      }
+      if (changed.length) await tx.auditLog.create({ data: { userId: req.user!.id, userName: req.user!.name + ' (' + req.user!.role + ')', module: 'Payment', action: 'RER payment prices corrected', record: txnForPayment, branch, oldValue: 'Price changes in centavos', newValue: changed.join(' · ') + ' · Reason: ' + priceInput.data.reason, time: clinicDate() + ' · ' + new Date().toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' }), device: req.userAgent } })
+      return paidRows
+    }
     if (intent === 'collect') {
       const due = pendings.filter(p => Number(p.amount) > 0)
       const extras = (Array.isArray(req.body.lines) ? req.body.lines : []).map((line: { service?: string, qty?: number }) => {
@@ -1093,7 +1242,7 @@ clinicalRouter.post('/payments', requirePage('payments'), async (req, res) => {
     return rows
   }).catch(err => {
     const msg = err instanceof Error ? err.message : 'Unable to save the bill'
-    if (msg.startsWith('Save the RER') || msg.startsWith('Add at least')) return { error: msg }
+    if (msg.startsWith('Save the RER') || msg.startsWith('Add at least') || msg.startsWith('Record Flu,') || msg.startsWith('Use the ARV charge') || msg.startsWith('Review duplicate ARV') || msg.startsWith('Review the existing ERIG') || msg.startsWith('The booster bill does not match') || msg.startsWith('Review the existing booster amount') || msg.startsWith('The bill changed') || msg.startsWith('Select a valid RER service') || msg.startsWith('Enter a valid price') || msg.startsWith('Enter a reason for the price correction') || msg.startsWith('Use Flu')) return { error: msg }
     throw err
   })
   if ('error' in saved) return res.status(400).json(saved)

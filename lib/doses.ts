@@ -15,6 +15,9 @@ export type DoseInput = {
   animalStatus: 'Alive' | 'Lost/Stray' | 'Dead'
   vaccinator: string
   batch?: string
+  signature?: string
+  signatureMethod?: 'pen' | 'upload'
+  recordedBy?: string
 }
 
 function clock() {
@@ -66,6 +69,7 @@ export async function createDoseInTx(tx: Tx, enc: Encounter, input: DoseInput, b
       advised: next ? (DAY_LABEL[next[0]] || next[0]) + ' · ' + addDaysUtc(input.date, next[1] - protocol.days[k][1]) : 'Series complete',
       animalStatus: input.animalStatus,
       vaccinator: input.vaccinator,
+      ...(input.signature ? { signature: input.signature, signatureMethod: input.signatureMethod, signedAt: new Date(), recordedBy: input.recordedBy } : {}),
       branch: servicing
     }
   })

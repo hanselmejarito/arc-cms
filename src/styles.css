@@ -368,7 +368,7 @@ html.print-admission .soap-paper .arc-box{width:11px;height:11px}
 /* Signatures overlay the original space without adding a row to the form. */
 .arc-signature-slot{position:relative;isolation:isolate}
 .arc-signature-slot>span{position:relative;z-index:1}
-.arc-signature-overlay{position:absolute;left:50%;bottom:3mm;transform:translateX(-50%);width:40mm;max-width:90%;height:7mm;object-fit:contain;pointer-events:none}
+.arc-signature-overlay{position:absolute;left:50%;bottom:3mm;transform:translateX(-50%);width:40mm;max-width:90%;height:9mm;object-fit:contain;pointer-events:none}
 html.print-rer .arc-consent-panel{display:flex;flex-direction:column;min-height:0}
 html.print-rer .arc-consent-block{flex:1;min-height:0;justify-content:flex-end}
 html.print-rer .arc-signature-slot>span{line-height:1.15}
@@ -404,3 +404,39 @@ html.print-admission .soap-signature-overlay{max-width:30mm;max-height:16mm}
 /* High-contrast visual marker for pen hover and drawing. */
 .signature-pointer{position:fixed;left:0;top:0;z-index:10001;width:18px;height:18px;box-sizing:border-box;border:2px solid #fff;border-radius:50%;background:#142d38;box-shadow:0 0 0 2px #142d38;transform:translate(-50%,-50%);pointer-events:none;visibility:hidden}
 .signature-pointer::after{content:'';position:absolute;width:4px;height:4px;background:#fff;border-radius:50%;left:50%;top:50%;transform:translate(-50%,-50%)}
+
+.arc-vaccinator-signed{position:relative;display:block;min-width:0}
+.arc-dose-meta .arc-vaccinator-signature{position:absolute;bottom:0;left:0;width:100%;height:30px;object-fit:contain;pointer-events:none}
+
+/* Dedicated, all-row HR printouts. */
+.hr-print-source,.hr-print-host{display:none}
+@media print{
+ html.print-hr body> :not(.hr-print-host){display:none!important}
+ html.print-hr,html.print-hr body{height:auto!important;overflow:visible!important;background:#fff!important}
+ html.print-hr .hr-print-host{display:block!important;color:#111!important;background:#fff!important;font-family:Arial,sans-serif}
+ html.print-hr .hr-sheet{break-after:page;page-break-after:always;color:#111;background:#fff}
+ html.print-hr .hr-sheet:last-child{break-after:auto;page-break-after:auto}
+ html.print-hr .hr-sheet-header{display:flex;align-items:center;justify-content:center;gap:5mm;margin-bottom:4mm;text-align:center}
+ html.print-hr .hr-sheet-header .arc-form-logo{width:19mm;height:19mm;border-radius:50%;overflow:hidden;background:#ffcc00;flex:none;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+ html.print-hr .hr-sheet-header .arc-form-logo img{width:100%;height:100%;object-fit:cover;display:block}
+ html.print-hr .hr-sheet-header div{display:flex;flex-direction:column;gap:1mm}
+ html.print-hr .hr-sheet-header strong{font-size:14pt}
+ html.print-hr .hr-sheet-header b{font-size:10pt}
+ html.print-hr .hr-sheet-header span{font-size:9pt;text-transform:uppercase}
+ html.print-hr .hr-table{width:100%;border-collapse:collapse;table-layout:auto;font-size:7pt;color:#111}
+ html.print-hr .hr-table th,html.print-hr .hr-table td{border:1px solid #222;padding:2mm 1mm;text-align:center;color:#111;background:#fff!important}
+ html.print-hr .hr-table th{font-size:6.5pt;font-weight:700;white-space:normal}
+ html.print-hr .hr-table .hr-name{text-align:left;min-width:30mm;overflow-wrap:anywhere}
+ html.print-hr .hr-table .hr-amount{text-align:right;white-space:nowrap}
+ html.print-hr .hr-table thead{display:table-header-group}
+ html.print-hr .hr-table tr{break-inside:avoid;page-break-inside:avoid}
+ html.print-hr .hr-attendance-table th:not(:first-child),html.print-hr .hr-attendance-table td:not(:first-child){min-width:5mm}
+ html.print-hr .hr-payroll-table{font-size:6pt}
+ html.print-hr .hr-payroll-table th,html.print-hr .hr-payroll-table td{padding:1.5mm .7mm}
+ html.print-hr .hr-payroll-table td:last-child{min-width:17mm}
+ html.print-hr .hr-legend{font-size:7pt;color:#111;margin:2mm 0}
+ html.print-hr .hr-signatories{display:flex;justify-content:space-between;gap:12mm;margin-top:12mm;break-inside:avoid}
+ html.print-hr .hr-signatories>div{display:flex;flex-direction:column;width:28%;font-size:8pt}
+ html.print-hr .hr-signatories i{display:block;border-bottom:1px solid #111;height:10mm}
+ html.print-hr .hr-signatories small{text-align:center;font-size:7pt}
+}

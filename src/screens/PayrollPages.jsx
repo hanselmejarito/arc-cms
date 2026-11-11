@@ -4,6 +4,7 @@ import { branchMaster as seedBranches, fmt, money, overrideFor, payPeriods, peri
 import { decideOvertimeApi, resetPayrollInputApi, saveContributionOverrideApi, savePayrollInputApi } from '../api'
 import { Badge, BrandLogo, Button, Card, Field, Modal, SectionTitle, Select, Table, Tabs } from '../components'
 import { calc } from './People'
+import { PayrollPrint, printHrDocument } from './HrPrint'
 
 const scope = (items, b) => b === 'All branches' ? items : items.filter(x => x.branch === b)
 const initials = n => n.split(' ').map(x => x[0]).join('').slice(0, 2)
@@ -46,7 +47,7 @@ export function PayrollPage({
   if (!employee) {
     return (
       <>
-        <SectionTitle eyebrow="PEOPLE OPERATIONS" title="Payroll" description="Auto from Time In / Time Out after you add staff." />
+      <SectionTitle eyebrow="PEOPLE OPERATIONS" title="Payroll" description="Auto from Time In / Time Out after you add staff." />
         <Card><p className="card-note">No employees yet. Add staff under Employees, then they can Time In.</p></Card>
       </>
     )
@@ -58,12 +59,13 @@ export function PayrollPage({
     [period + employee.id]: { ...current, [ev.target.name]: ev.target.type === 'checkbox' ? ev.target.checked : ev.target.value }
   })
   const register = visible.map(e => ({ ...e, c: pay(e), i: inp(e) }))
+  const printedRegister = visible.map(e => { const i=payOf(e,period,attendance,users,payrollInputs,{},overtimeRequests); return {...e,i,c:calc(e,i,ov(e),1,branchMaster,{payday:P?.half})} })
   const employeeByUser = new Map(users.map(u => [u.id, u.employeeId || u.employee]))
   const historyRows = payPeriods.flatMap(p => {
     const members = visible.filter(e =>
       payrollInputs.some(input => input.employeeId === e.id && input.periodId === p.id) ||
       attendance.some(row =>
-        row.date >= p.from && row.date <= p.to && row.in &&
+        row.date >= p.from && row.date <= p.to && (row.in || row.nightIn) &&
         (row.employeeId === e.id || employeeByUser.get(row.userId) === e.id)
       )
     )
@@ -86,8 +88,9 @@ export function PayrollPage({
   })
   const total = k => register.reduce((a, r) => a + r.c[k], 0)
   const lines = [
-    ['Basic pay (' + c.days + ' duty days)', c.basic, 'plus'],
-    ['Approved overtime', c.otPay, 'plus'],
+    ['Base shift pay (' + c.days + ' shifts)', c.days * Number(employee.rate || 0), 'plus'],
+    ['Night shift pay (' + c.nightShiftDays + ' shifts)', c.nightShiftDays * Number(employee.rate || 0), 'plus'],
+    ['Scheduled and approved overtime', c.otPay, 'plus'],
     ['Night differential (10%)', c.nightPay, 'plus'],
     ['Regular holiday pay (' + c.holidayRegular + ' days)', c.regularHolidayPay, 'plus'],
     ['Special holiday pay (' + c.holidaySpecial + ' days)', c.specialHolidayPay, 'plus'],
@@ -100,6 +103,7 @@ export function PayrollPage({
     ['Other approved deductions', c.other, 'minus']
   ]
   const savePay = async () => {
+    if (current.auto.needsReview?.length) { notify('Review attendance breaks before updating payroll', 'error'); return }
     if (!payReason) { notify('Reason is required to update payroll'); return }
     try {
       const saved = await savePayrollInputApi({
@@ -127,7 +131,9 @@ export function PayrollPage({
   }
   return (
     <>
-      <SectionTitle eyebrow="PEOPLE OPERATIONS" title="Payroll" description="Auto from Time In / Time Out. Admin can update a cutoff with a reason." action={<><Select value={period} onChange={setPeriod} options={payPeriods.map(p => [p.id, p.label])} /><Button variant="secondary" icon={Printer} onClick={() => window.print()}>Print</Button></>} />
+      <div id="payroll-print-source" className="hr-print-source"><PayrollPrint rows={printedRegister} period={{...P,id:period}}/></div>
+      <SectionTitle eyebrow="PEOPLE OPERATIONS" title="Payroll" description="Auto from Time In / Time Out. Admin can update a cutoff with a reason." action={<><Select value={period} onChange={setPeriod} options={payPeriods.map(p => [p.id, p.label])} /><Button variant="secondary" icon={Printer} disabled={register.some(r=>r.i.auto.needsReview?.length)} onClick={() => printHrDocument('payroll-print-source')}>Print payroll register</Button></>} />
+      {register.some(r=>r.i.auto.needsReview?.length)&&<div className="notice-line" role="alert">Some attendance records need Admin review (missing time, break, or night overtime). Review Attendance before using or printing these payroll figures.</div>}
       <div className="notice-line"><ShieldCheck size={18} /><span>Duty days come from Time In / Time Out. Enrolled staff: 15th payslip deducts Pag-IBIG ₱200 and PhilHealth ₱337.50, 30th payslip deducts SSS ₱675. Employees whose membership is still being processed stay at ₱0. Employer share is remitted by the clinic, not deducted.</span></div>
       <div className="payroll-header">
         <div><span>PAY PERIOD</span><strong>{P.label}</strong><small>Cutoff: {fmt(P.cutoff)} · Release: {fmt(P.pay)}</small></div>
@@ -139,7 +145,8 @@ export function PayrollPage({
         <Table pageSize={10} columns={[
           { label: 'EMPLOYEE', render: r => <div><strong>{r.name}</strong><small className="block-sub">{r.id} · {r.branch}</small></div> },
           { label: 'SOURCE', render: r => <Badge tone={r.i.stored ? 'amber' : 'slate'}>{r.i.stored ? 'Updated' : 'Time In'}</Badge> },
-          { label: 'DUTY DAYS', render: r => r.c.days },
+          { label: 'DUTY DAYS', render: r => r.c.calendarDays },
+          { label: 'NIGHT SHIFTS', render: r => r.c.nightShiftDays },
           { label: 'BASIC', render: r => money(r.c.basic) },
           { label: 'LATE / UT', render: r => <span className="negative">−{money(r.c.lateDed + r.c.underDed)}</span> },
           { label: 'OT', render: r => money(r.c.otPay) },
@@ -174,7 +181,7 @@ export function PayrollPage({
           </Card>
           <Card title="Additional earnings">
             <div className="form-grid">
-              <Field label="Approved OT hours" value={current.ot || 0} disabled help="From approved Attendance requests. Paid at daily rate ÷ 8 × 1.25." />
+              <Field label="Scheduled + approved OT hours" value={current.ot || 0} disabled help="Includes scheduled OT and approved requests. Paid at daily rate ÷ 8 × 1.25." />
               <Field label="Night-duty hours" name="night" type="number" value={current.night} onChange={upd} disabled={!admin || !(employee.shift === 'Night Shift' && nightOf(branchMaster, employee.branch))} help="Auto from night Time In / Time Out" />
               <Field label="Regular holiday days" name="holidayRegular" type="number" value={current.holidayRegular ?? current.holiday} onChange={upd} disabled={!admin} help="Daily rate × 100%" />
               <Field label="Special holiday days" name="holidaySpecial" type="number" value={current.holidaySpecial ?? 0} onChange={upd} disabled={!admin} help="Daily rate × 30%" />
@@ -215,7 +222,7 @@ export function PayrollPage({
         <Card title="Override audit"><Table columns={[{ label: 'EMPLOYEE', key: 'employee' }, { label: 'SSS / PHIC / HDMF', key: 'values' }, { label: 'REASON', key: 'reason' }, { label: 'EFFECTIVE', key: 'effective' }, { label: 'CHANGED BY', key: 'by' }]} rows={[...contributionOverrides].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).map(r => { const show = v => v === null || v === undefined || v === '' ? 'auto' : money(v); return { id: r.id, employee: (employees.find(e => e.id === r.employeeId) || {}).name || r.employeeId, values: [show(r.sss), show(r.phil), show(r.pagibig)].join(' / '), reason: r.reason, effective: (payPeriods.find(p => p.id === r.fromPeriod) || {}).label || r.fromPeriod, by: r.by } })} empty="No contribution overrides recorded." /></Card>
       </div>}
       {tab === 'OT approvals' && <Card title="Overtime approval">
-        <div className="notice-line"><Clock3 size={18} /><span>Staff file overtime on Attendance after Time Out. Pay is daily rate ÷ 8 × 1.25, and only after approval. An approver cannot decide their own request.</span></div>
+        <div className="notice-line"><Clock3 size={18} /><span>Muñoz and Palayan scheduled overtime is included after attendance review. Post-shift overtime is filed after Time Out and requires approval. An approver cannot decide their own request.</span></div>
         <Table columns={[
           { label: 'DATE', render: r => fmt(r.date) },
           { label: 'EMPLOYEE', render: r => r.name },
@@ -233,7 +240,7 @@ export function PayrollPage({
           { label: 'EMPLOYEES', key: 'count' }, { label: 'GROSS', render: r => money(r.gross) }, { label: 'NET PAY', render: r => <strong>{money(r.net)}</strong> },
           { label: 'SOURCE', render: r => <Badge>{r.source}</Badge> }
         ]} rows={historyRows} empty="No payroll history yet. Time In or save a payroll update to create a record." />
-        <p className="card-note">Only cutoffs with Time In or a saved payroll update appear. Approved overtime comes from Attendance requests.</p>
+        <p className="card-note">Only cutoffs with Time In or a saved payroll update appear. Scheduled OT is included separately from approved requests.</p>
       </Card>}
       {decision && <Modal title={(decision.status === 'Approved' ? 'Approve' : 'Reject') + ' overtime · ' + decision.name} onClose={() => setDecision(null)} footer={<><Button variant="secondary" onClick={() => setDecision(null)}>Cancel</Button><Button onClick={async () => { if (!decision.reason.trim()) { notify('A reason is required'); return } try { const saved = await decideOvertimeApi(decision.id, { status: decision.status, reason: decision.reason.trim() }); if (setOvertimeRequests) setOvertimeRequests(list => [saved, ...list.filter(x => x.id !== saved.id)]); setDecision(null); notify('Overtime ' + saved.status.toLowerCase() + ' for ' + decision.name, 'Payroll') } catch (err) { notify(err.message, 'error') } }}>{decision.status === 'Approved' ? 'Approve' : 'Reject'}</Button></>}><Field label="Reason (required)" type="textarea" value={decision.reason} onChange={e => setDecision({ ...decision, reason: e.target.value })} placeholder="Verified against the Bundy clock" /></Modal>}
     </>
@@ -244,17 +251,18 @@ export function PayslipsPage({
   branch, role, employees = [], employeeId, branchMaster, attendance = [], users = [], payrollInputs = [], contributionOverrides = [], overtimeRequests = []
 }) {
   const listAll = payslipListRoles.includes(role)
-  const me = employeeId || employees[0]?.id || ''
-  const visible = listAll ? scope(employees, branch) : employees.filter(e => e.id === me)
+  const me = employeeId || ''
+  const eligible = employees.filter(e => e.payroll)
+  const visible = listAll ? scope(eligible, branch) : eligible.filter(e => e.id === me)
   const [id, setId] = React.useState(visible[0]?.id || me)
   const [period, setPeriod] = React.useState(payPeriods[0].id)
-  const employee = employees.find(x => x.id === id) || visible[0] || employees[0]
+  const employee = visible.find(x => x.id === id) || visible[0]
   const P = payPeriods.find(p => p.id === period)
   if (!employee) {
     return (
       <>
-        <SectionTitle eyebrow="PEOPLE OPERATIONS" title="Payslips" description="Payslips appear after you add employees and they Time In." />
-        <Card><p className="card-note">No employees yet. Add staff under Employees first.</p></Card>
+        <SectionTitle eyebrow="PEOPLE OPERATIONS" title="Payslips" description="Payslips are available for payroll-eligible employees." />
+        <Card><p className="card-note">No payroll-eligible employee is available for this account or branch.</p></Card>
       </>
     )
   }
@@ -262,9 +270,10 @@ export function PayslipsPage({
   const c = calc(employee, current, overrideFor(contributionOverrides, employee.id, period) || {}, 1, branchMaster, { payday: P?.half })
   return (
     <>
-      <SectionTitle eyebrow="PEOPLE OPERATIONS" title="Payslips" description={listAll ? 'Printable payslips. Figures come from Time In unless payroll was updated.' : 'Your payslips from Time In / Time Out.'} action={<Button variant="secondary" icon={Printer} onClick={() => window.print()}>Print / download payslip</Button>} />
+      <SectionTitle eyebrow="PEOPLE OPERATIONS" title="Payslips" description={listAll ? 'Printable payslips. Figures come from Time In unless payroll was updated.' : 'Your payslips from Time In / Time Out.'} action={<Button variant="secondary" icon={Printer} disabled={current.auto.needsReview?.length>0} onClick={() => window.print()}>Print / download payslip</Button>} />
+      {current.auto.needsReview?.length>0&&<div className="notice-line" role="alert">Attendance on {current.auto.needsReview.join(', ')} requires Admin attendance review. Amounts may be incomplete.</div>}
       <div className="payslip-select">
-        {listAll && <Field label="Select employee" value={id} options={visible.map(e => [e.id, e.name + ' · ' + e.branch])} onChange={e => setId(e.target.value)} />}
+        {listAll && <Field label="Select employee" value={employee.id} options={visible.map(e => [e.id, e.name + ' · ' + e.branch])} onChange={e => setId(e.target.value)} />}
         <Field label="Payroll period" value={period} options={payPeriods.map(p => [p.id, p.label])} onChange={e => setPeriod(e.target.value)} />
         <span>Cutoff: {fmt(P.cutoff)} · Pay date: {fmt(P.pay)} · {current.stored ? 'Updated' : 'Auto from Time In'}</span>
       </div>
@@ -273,16 +282,16 @@ export function PayslipsPage({
         <div className="payslip-info">
           <div><small>EMPLOYEE</small><strong>{employee.name}</strong><span>{employee.id} · {employee.position}</span></div>
           <div><small>BRANCH</small><strong>{employee.branch}</strong><span>{employee.shift}</span></div>
-          <div><small>PAY PERIOD</small><strong>{P.label}</strong><span>{c.days} duty days</span></div>
+          <div><small>PAY PERIOD</small><strong>{P.label}</strong><span>{c.days} base / {c.nightShiftDays} additional night shifts</span></div>
           <div><small>DAILY RATE</small><strong>{money(employee.rate)}</strong><span>No work, no pay</span></div>
         </div>
         <div className="payslip-columns">
-          <div><h3>Earnings</h3><div><span>Basic pay</span><strong>{money(c.basic)}</strong></div><div><span>Approved overtime</span><strong>{money(c.otPay)}</strong></div><div><span>Night differential</span><strong>{money(c.nightPay)}</strong></div><div><span>Regular holiday pay</span><strong>{money(c.regularHolidayPay)}</strong></div><div><span>Special holiday pay</span><strong>{money(c.specialHolidayPay)}</strong></div><div><span>Officer allowance</span><strong>{money(c.allowance)}</strong></div></div>
+          <div><h3>Earnings</h3><div><span>Base shift pay</span><strong>{money(c.days*Number(employee.rate||0))}</strong></div><div><span>Night shift pay</span><strong>{money(c.nightShiftDays*Number(employee.rate||0))}</strong></div><div><span>Scheduled and approved overtime</span><strong>{money(c.otPay)}</strong></div><div><span>Night differential</span><strong>{money(c.nightPay)}</strong></div><div><span>Regular holiday pay</span><strong>{money(c.regularHolidayPay)}</strong></div><div><span>Special holiday pay</span><strong>{money(c.specialHolidayPay)}</strong></div><div><span>Officer allowance</span><strong>{money(c.allowance)}</strong></div></div>
           <div><h3>Deductions</h3><div><span>Late</span><strong>{money(c.lateDed)}</strong></div><div><span>Undertime</span><strong>{money(c.underDed)}</strong></div><div><span>SSS</span><strong>{money(c.sss)}</strong></div><div><span>PhilHealth</span><strong>{money(c.phil)}</strong></div><div><span>Pag-IBIG</span><strong>{money(c.pagibig)}</strong></div><div><span>Other approved deductions</span><strong>{money(c.other)}</strong></div></div>
         </div>
         <div className="payslip-net"><span>NET PAY</span><strong>{money(c.net)}</strong></div>
         {listAll && <EmployerBox c={c} />}
-        <p>{current.stored ? 'Updated by Admin · ' + (current.reason || '') : 'Auto from Time In / Time Out'}. Approved overtime is daily rate ÷ 8 × 1.25 after approval.</p>
+        <p>{current.stored ? 'Updated by Admin · ' + (current.reason || '') : 'Auto from Time In / Time Out'}. Scheduled OT and approved post-shift overtime use daily rate ÷ 8 × 1.25.</p>
       </div>
     </>
   )

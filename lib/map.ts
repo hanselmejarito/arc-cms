@@ -128,6 +128,8 @@ export function doseClient(d: Dose) {
     advised: d.advised,
     animalStatus: d.animalStatus,
     vaccinator: d.vaccinator,
+    signature: d.signature,
+    signatureMethod: d.signatureMethod,
     branch: d.branch
   }
 }
@@ -163,6 +165,10 @@ export function paymentClient(p: Payment) {
     service: p.service,
     classification: p.classification,
     amount: p.amount,
+    unitPriceCentavos: p.unitPriceCentavos,
+    discountType: p.discountType,
+    discountCentavos: p.discountCentavos,
+    quantity: p.quantity == null ? null : Number(p.quantity),
     method: p.method,
     reference: p.reference,
     status: p.status,
@@ -342,6 +348,8 @@ export function attendanceClient(x: Attendance & { user?: { employeeId: string |
     date: x.date,
     in: x.clockIn,
     out: x.clockOut,
+    nightIn: x.nightClockIn,
+    nightOut: x.nightClockOut,
     source: x.source,
     branch: x.branch,
     device: x.device,
