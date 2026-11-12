@@ -18,7 +18,7 @@ function cents(value) {
   const amount = Number(whole) * 100 + Number(decimals.padEnd(2, '0'))
   return Number.isSafeInteger(amount) && amount > 0 && amount <= 100000000 ? amount : null
 }
-function groupTreatmentVisits(rows) {
+export function groupTreatmentVisits(rows) {
   const groups = new Map()
   for (const row of rows) {
     const key = row.visitId ? 'visit:' + row.visitId : 'treatment:' + row.id

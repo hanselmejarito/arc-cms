@@ -1,0 +1,18 @@
+from pathlib import Path
+p = Path('src/screens/Clinical.jsx')
+s = p.read_text(encoding='utf-8')
+def replace(old, new):
+    global s
+    if s.count(old) != 1:
+        raise ValueError('Expected one match: ' + old[:100])
+    s = s.replace(old, new, 1)
+replace("import { OtherTreatmentHistory } from './OtherTreatments'", "import { OtherTreatmentHistory, groupTreatmentVisits } from './OtherTreatments'")
+replace('export function PatientsPage({branch,role,patients,setPatients,encounters,doses,schedule,go,setPatientId,notify,focus})', 'export function PatientsPage({branch,role,patients,setPatients,encounters,doses,schedule,go,setPatientId,notify,focus,can})')
+replace("React.useEffect(()=>{setStatus(focus==='complete'?'Complete':'')},[focus]);const visible=patients.filter(p=>inB(branch,p.branch)||encounters.some(e=>e.patientId===p.id&&inB(branch,encBranch(e))));", "React.useEffect(()=>{setStatus(focus==='complete'?'Complete':'')},[focus]);const [otherRows,setOtherRows]=React.useState(null),[otherError,setOtherError]=React.useState(false);React.useEffect(()=>{let active=true;setOtherRows(null);setOtherError(false);if(!can('treatments'))return()=>{active=false};api('/api/other-treatments').then(rows=>{if(active)setOtherRows(rows)}).catch(()=>{if(active)setOtherError(true)});return()=>{active=false}},[role]);const otherVisits=groupTreatmentVisits((otherRows||[]).filter(x=>x.status==='Given'&&inB(branch,x.branch)));const visible=patients.filter(p=>inB(branch,p.branch)||encounters.some(e=>e.patientId===p.id&&inB(branch,encBranch(e)))||otherVisits.some(t=>t.patientId===p.id));")
+replace("return {...p,registry:e?.registry||'—',allRegistry:encounters.filter(x=>x.patientId===p.id).map(x=>x.registry).join(' '),last:e?.date,next:s?.date,status:e?statusOf(e,doses):'Registered',visits:encounters.filter(x=>x.patientId===p.id).length,doseToday:doseByPatient[p.id]}", "const other=otherVisits.filter(t=>t.patientId===p.id),admissions=encounters.filter(x=>x.patientId===p.id);return {...p,registry:e?.registry||'—',allRegistry:admissions.map(x=>x.registry).join(' '),last:[e?.date,...other.map(t=>t.date)].filter(Boolean).sort().at(-1),next:s?.date,status:e?statusOf(e,doses):'Registered',visits:admissions.length+other.length,doseToday:doseByPatient[p.id]}")
+replace("<strong>{rows.filter(p=>p.visits>1).length}</strong><span>Returning patients</span>", "<strong>{otherRows===null?'—':rows.filter(p=>p.visits>1).length}</strong><span>Returning patients</span>")
+replace("<Card><div className=\"toolbar\"><SearchBox value={q} onChange={setQ} placeholder=\"Search name, registry no. or contact number...\"/>", "<Card>{otherError&&<p role=\"alert\">Unable to load other treatment visits. Visit totals and last visit dates are unavailable; reload to try again.</p>}{!seen&&<p className=\"card-note\">Visits include admissions and other treatment visits; follow-up doses are not counted separately.</p>}<div className=\"toolbar\"><SearchBox value={q} onChange={setQ} placeholder=\"Search name, registry no. or contact number...\"/>")
+replace("{label:'VISITS',key:'visits'},{label:'LAST VISIT',render:r=>fmt(r.last)}", "{label:'VISITS',render:r=>otherRows===null?'—':r.visits},{label:'LAST VISIT',render:r=>otherRows===null?'—':fmt(r.last)}")
+replace("{tab==='Visits'&&<Card title=\"Admissions / encounters\">", "{tab==='Visits'&&<><Card title=\"Admissions / encounters\">")
+replace('previous visits remain visible to authorized branches.</p></Card>}', 'previous visits remain visible to authorized branches. Follow-up doses are listed under Treatments.</p></Card>{can(\'treatments\')&&<OtherTreatmentHistory patientId={p.id} branch={branch}/>}</>}')
+p.write_text(s,encoding='utf-8')
