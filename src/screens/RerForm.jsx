@@ -49,7 +49,8 @@ function ClearPrintSignature({src, className, alt, strengthen = false}){
      const scale=360/Math.max(sw,sh),w2=Math.max(1,Math.round(sw*scale)),h2=Math.max(1,Math.round(sh*scale))
      const base=document.createElement('canvas');base.width=w2;base.height=h2;base.getContext('2d').drawImage(out,0,0,w2,h2)
      const bold=document.createElement('canvas');bold.width=w2+8;bold.height=h2+8
-     const bctx=bold.getContext('2d');for(let dy=-3;dy<=3;dy++)for(let dx=-3;dx<=3;dx++)if(dx*dx+dy*dy<=9)bctx.drawImage(base,4+dx,4+dy)
+     const radius=strengthen==='soft'?1:3
+     const bctx=bold.getContext('2d');for(let dy=-radius;dy<=radius;dy++)for(let dx=-radius;dx<=radius;dx++)if(dx*dx+dy*dy<=radius*radius)bctx.drawImage(base,4+dx,4+dy)
      if(!cancelled)setPrepared(bold.toDataURL('image/png'))
     }else if(!cancelled)setPrepared(out.toDataURL('image/png'))
    }catch{if(!cancelled)setPrepared(src)}
@@ -185,7 +186,7 @@ function SoapPaperBlock({n}){
    </div>
   </div>
   <div className={'soap-paper-sign'+(n?.signature?' has-signature':'')}>
-   <div className="soap-signature-space">{n?.signature&&<ClearPrintSignature src={n.signature} alt="Progress note signature" className="soap-signature-overlay"/>}</div>
+   <div className="soap-signature-space">{n?.signature&&<ClearPrintSignature src={n.signature} alt="Progress note signature" className="soap-signature-overlay" strengthen="soft"/>}</div>
    <em>{n?.staff||''}</em>
    <span>NAME & SIGNATURE</span>
   </div>

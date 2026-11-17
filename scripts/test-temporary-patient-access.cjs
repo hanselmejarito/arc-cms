@@ -1,0 +1,6 @@
+const fs=require('fs'),ts=require('typescript'),assert=require('node:assert/strict')
+let patient=null,encounter=null,treatment=null
+const prisma={patient:{findFirst:async()=>patient},encounter:{findFirst:async()=>encounter},otherTreatment:{findFirst:async()=>treatment}}
+const js=ts.transpileModule(fs.readFileSync('lib/temporaryPatientAccess.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText
+const out={};new Function('require','exports',js)(name=>name==='./prisma.js'?{prisma}:require(name),out)
+;(async()=>{const user={strictBranchScope:true,branchName:'Paniqui'};assert.equal(await out.temporaryPatientAllowed(user,'patient'),false);patient={id:'patient'};assert.equal(await out.temporaryPatientAllowed(user,'patient'),true);patient=null;encounter={id:'case'};assert.equal(await out.temporaryPatientAllowed(user,'patient'),true);encounter=null;treatment={id:'treatment'};assert.equal(await out.temporaryPatientAllowed(user,'patient'),true);assert.equal(await out.temporaryPatientAllowed({...user,branchName:null},'patient'),false);assert.equal(await out.temporaryPatientAllowed({strictBranchScope:false},'patient'),true);console.log('Temporary patient access scope: PASS')})().catch(e=>{console.error(e);process.exitCode=1})

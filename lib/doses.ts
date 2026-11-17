@@ -1,8 +1,10 @@
 import type { Encounter, Payment, PrismaClient } from '@prisma/client'
 import { servicingBranch } from './auth.js'
-import { DAY_LABEL, NURSE_ROLE, protocolOf, visitNeedsPay, visitPaid } from './clinical.js'
+import { DAY_LABEL, NURSE_ROLE, protocolOf } from './clinical.js'
 import { nextId } from './ids.js'
 import { applyConsume, doseUses } from './inventory.js'
+import { auditSavedSignatureUse, resolveStaffSignature } from './staffSignatures.js'
+import { nursesByDuty } from './nurseDuty.js'
 
 type Tx = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>
 
@@ -12,7 +14,7 @@ export type DoseInput = {
   time: string
   dose: string
   side: 'L' | 'R'
-  animalStatus: 'Alive' | 'Lost/Stray' | 'Dead'
+  animalStatus: '' | 'Alive' | 'Lost/Stray' | 'Dead'
   vaccinator: string
   batch?: string
   signature?: string
@@ -25,6 +27,11 @@ function clock() {
 }
 
 export async function resolveVaccinator(tx: Tx, branch: string, name?: string, fallback?: string) {
+  if (process.env.TEMPORARY_BRANCH_ENABLED === 'true') {
+    const nurses=(await nursesByDuty(tx)).filter(n=>n.dutyBranch===branch)
+    const pick=(n?: string)=>(n&&nurses.find(e=>e.name===n))||null
+    return pick(name)||pick(fallback)||nurses[0]||null
+  }
   const nurses = await tx.employee.findMany({
     where: { branch, role: NURSE_ROLE, status: 'Active' },
     orderBy: { name: 'asc' }
@@ -41,7 +48,6 @@ export function autoDay0Skip(enc: Encounter, pays: Payment[]) {
   if (!enc.rer || enc.died || enc.remark === 'Transferred') return 'no-pep'
   if (enc.continuedFromEncounterId) return 'receiving'
   if (!enc.preExp && !enc.booster && (enc.category === 'I' || !enc.pepEligible)) return 'no-pep'
-  if (visitNeedsPay(enc) && !visitPaid(pays, enc.id)) return 'pay'
   return ''
 }
 
@@ -94,7 +100,7 @@ export async function createDoseInTx(tx: Tx, enc: Encounter, input: DoseInput, b
   return { created, consumed, movement }
 }
 
-export async function tryAutoDay0(tx: Tx, enc: Encounter, pays: Payment[], by: string, vaccinator?: string) {
+export async function tryAutoDay0(tx: Tx, enc: Encounter, pays: Payment[], by: string, vaccinator?: string, savedSignatureId?: string, recordedBy?: string, savedSignatureVersion?: string) {
   const skip = autoDay0Skip(enc, pays)
   if (skip) return { skipped: true as const, reason: skip }
   const existing = await tx.dose.findFirst({ where: { encounterId: enc.id, day: 'D0' } })
@@ -102,6 +108,9 @@ export async function tryAutoDay0(tx: Tx, enc: Encounter, pays: Payment[], by: s
   const servicing = servicingBranch(enc)
   const nurse = await resolveVaccinator(tx, servicing, vaccinator, by)
   if (!nurse) throw new Error('No Nurse at ' + servicing + ' · add an employee first')
+  if(savedSignatureId&&nurse.name!==vaccinator)throw new Error('No Nurse matching the selected vaccinator at '+servicing)
+  const signature=savedSignatureId?await resolveStaffSignature(tx,savedSignatureId,'Nurse',nurse.name,servicing,savedSignatureVersion||''):null
+  if(savedSignatureId){if(!recordedBy)throw new Error('The saved signature requires an identified user.');await auditSavedSignatureUse(tx,{id:recordedBy,name:by},savedSignatureId,enc.registry+' · D0',servicing)}
   const side = enc.side === 'R' ? 'R' : 'L'
   const animalStatus = enc.animalStatus === 'Lost/Stray' || enc.animalStatus === 'Dead' ? enc.animalStatus : 'Alive'
   return createDoseInTx(tx, enc, {
@@ -111,7 +120,8 @@ export async function tryAutoDay0(tx: Tx, enc: Encounter, pays: Payment[], by: s
     dose: day0DoseOf(enc),
     side,
     animalStatus,
-    vaccinator: nurse.name
+    vaccinator: nurse.name,
+    ...(signature?{signature:signature.image,signatureMethod:signature.method as 'pen'|'upload',recordedBy}:{})
   }, by)
 }
 

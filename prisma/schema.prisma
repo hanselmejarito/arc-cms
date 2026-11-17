@@ -20,6 +20,25 @@ model Branch {
   main          Boolean @default(false)
   morning       Boolean @default(true)
   status        String  @default("Active")
+  schedules     BranchSchedule[]
+}
+
+// Schedules are versioned so changing a branch never rewrites earlier duties.
+model BranchSchedule {
+  id             String @id @default(cuid())
+  branchName     String
+  branch         Branch @relation(fields: [branchName], references: [name], onDelete: Restrict, onUpdate: Cascade)
+  effectiveFrom  String
+  morningStart   String
+  morningEnd     String
+  nurseStart     String
+  nurseEnd       String
+  nightEnabled   Boolean @default(false)
+  nightStart     String?
+  nightEnd       String?
+  createdAt      DateTime @default(now())
+  @@unique([branchName, effectiveFrom])
+  @@index([branchName, effectiveFrom])
 }
 
 model User {
@@ -130,12 +149,16 @@ model Encounter {
   pepEligible                Boolean         @default(false)
   stopAfter                  Int?
   animalStatus               String          @default("")
+  day14Workflow              String          @default("legacy")
   progress                   Json
   doctor                     String          @default("")
   doctorSignature            String?
   doctorSignatureMethod      String?
   doctorSignedAt             DateTime?
   doctorRecordedBy           String?
+  pendingDay0SignerId        String?
+  pendingDay0Vaccinator      String?
+  pendingDay0SignerVersion   String?
   remark                     String          @default("")
   transferredTo              String          @default("")
   died                       Boolean         @default(false)
@@ -155,6 +178,21 @@ model Encounter {
   notes                      ProgressNote[]
   payments                   Payment[]
   referrals                  Referral[]
+  animalObservations         AnimalObservation[]
+}
+
+model AnimalObservation {
+  id String @id @default(cuid())
+  encounterId String
+  encounter Encounter @relation(fields: [encounterId], references: [id], onDelete: Cascade)
+  status String
+  observedDate String?
+  reportedDate String
+  remarks String @default("")
+  recordedBy String
+  branch String
+  createdAt DateTime @default(now())
+  @@index([encounterId, reportedDate])
 }
 
 model Dose {
@@ -217,12 +255,15 @@ model Payment {
   discountType String?
   discountCentavos Int?
   quantity       Decimal?   @db.Decimal(12, 3)
+  claimValueCentavos Int?
+  followUpDay    String?
   method         String     @default("—")
   reference      String     @default("—")
   status         String
   remarks        String     @default("")
   txn            String     @default("")
   createdAt      DateTime   @default(now())
+  @@unique([encounterId, followUpDay])
 }
 
 model Referral {
@@ -375,8 +416,32 @@ model Employee {
   payroll Boolean @default(true)
   benefits Boolean @default(true)
   users   User[]
+  payrollEligibilityHistory PayrollEligibilityChange[]
 }
 
+model PayrollEligibilityChange {
+  id String @id @default(cuid())
+  employeeId String
+  employee Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  effectivePeriod String
+  previousEligible Boolean
+  eligible Boolean
+  createdAt DateTime @default(now())
+  @@unique([employeeId, effectivePeriod])
+}
+
+model StaffSignature {
+  id          String   @id @default(cuid())
+  kind        String
+  name        String
+  employeeId  String?
+  image       String
+  method      String
+  active      Boolean  @default(true)
+  updatedAt   DateTime @updatedAt
+  @@unique([kind, employeeId])
+  @@index([kind, name])
+}
 model Attendance {
   id        String  @id
   userId    String
@@ -386,6 +451,17 @@ model Attendance {
   clockOut  String  @default("")
   nightClockIn String @default("")
   nightClockOut String @default("")
+  nightBranch String?
+  homeBranchAtMorning String?
+  homeBranchAtNight String?
+  roleAtMorning String?
+  roleAtNight String?
+  rateAtMorning Float?
+  rateAtNight Float?
+  officerAtMorning Boolean?
+  officerAtNight Boolean?
+  benefitsAtMorning Boolean?
+  benefitsAtNight Boolean?
   source    String  @default("Time In button")
   branch    String
   device    String  @default("Branch workstation")
@@ -395,6 +471,7 @@ model Attendance {
   breakReviewedBy String?
   @@unique([userId, date])
 }
+
 
 model OvertimeRequest {
   id             String    @id @default(cuid())
@@ -425,6 +502,8 @@ model PayrollInput {
   holiday         Float    @default(0)
   holidaySpecial  Float    @default(0)
   holidayType     String   @default("Regular")
+  obCount     Int      @default(0)
+  obHomeBranch String  @default("")
   other       Float    @default(0)
   reason      String
   by          String

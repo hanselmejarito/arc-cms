@@ -1,10 +1,14 @@
 import React from 'react'
+import { payrollEligibleForPeriod } from '../payrollEligibility'
 import { Clock3, Printer, ShieldCheck } from 'lucide-react'
 import { branchMaster as seedBranches, fmt, money, overrideFor, payPeriods, periodInputsFromAttendance } from '../data'
 import { decideOvertimeApi, resetPayrollInputApi, saveContributionOverrideApi, savePayrollInputApi } from '../api'
 import { Badge, BrandLogo, Button, Card, Field, Modal, SectionTitle, Select, Table, Tabs } from '../components'
 import { calc } from './People'
 import { PayrollPrint, printHrDocument } from './HrPrint'
+import { branchPayrollRows } from '../branchPayroll'
+import { branchPayrollSummary } from '../branchPayrollSummary'
+import { attendanceForBranch, hasPayrollAdjustment } from '../dutyAllocation'
 
 const scope = (items, b) => b === 'All branches' ? items : items.filter(x => x.branch === b)
 const initials = n => n.split(' ').map(x => x[0]).join('').slice(0, 2)
@@ -20,34 +24,35 @@ function EmployerBox({ c }) {
   return <div className="payslip-employer"><h3>Clinic remittance <small>Not deducted from net pay</small></h3>{rows.length ? rows.map(([label, value]) => <div key={label}><span>{label}</span><strong>{money(value)}</strong></div>) : <div><span>This cutoff</span><strong>{money(0)}</strong></div>}<div className="employer-total"><span>Total to remit</span><strong>{money(remit(c))}</strong></div></div>
 }
 
-function payOf(e, period, attendance, users, payrollInputs, drafts, overtimeRequests) {
-  const auto = periodInputsFromAttendance(e, period, attendance, users, overtimeRequests)
+function payOf(e, period, attendance, users, payrollInputs, drafts, overtimeRequests, branchConfig) {
+  const auto = periodInputsFromAttendance(e, period, attendance, users, overtimeRequests, branchConfig)
   const stored = (payrollInputs || []).find(p => p.employeeId === e.id && p.periodId === period)
   return { ...auto, ...(stored || {}), ...(drafts[period + e.id] || {}), ot: auto.ot, otApproved: auto.ot > 0, auto, stored: !!stored }
 }
 
 export function PayrollPage({
-  branch, role, notify, employeeId, employees = [], branchMaster, attendance = [], users = [],
+  branch, role, notify, employeeId, employees = [], branchMaster, attendance = [], users = [], temporaryBranchEnabled = false,
   payrollInputs = [], setPayrollInputs, contributionOverrides = [], setContributionOverrides, overtimeRequests = [], setOvertimeRequests
 }) {
-  const visible = scope(employees, branch).filter(e => e.payroll)
   const [period, setPeriod] = React.useState(payPeriods[0].id)
   const [tab, setTab] = React.useState('Payroll register')
-  const [selected, setSelected] = React.useState(visible[0]?.id || '')
+  const [selected, setSelected] = React.useState(employees.find(e=>e.payroll)?.id || '')
   const [inputs, setInputs] = React.useState({})
   const [decision, setDecision] = React.useState(null)
   const [ovForm, setOvForm] = React.useState({ sss: '', phil: '', pagibig: '', reason: '', from: payPeriods[0].id })
   const [payReason, setPayReason] = React.useState('')
   const P = payPeriods.find(p => p.id === period)
+  const employeeByUserForScope = new Map(users.map(u => [u.id, u.employeeId || u.employee]))
+  const visible = employees.filter(e => payrollEligibleForPeriod(e, period) && (branch === 'All branches' || e.branch === branch || (temporaryBranchEnabled && (attendanceForBranch(attendance.filter(r => r.date >= P.from && r.date <= P.to && (r.employeeId === e.id || employeeByUserForScope.get(r.userId) === e.id)), branch).length > 0 || attendance.some(r=>r.date>=P.from&&r.date<=P.to&&(r.employeeId===e.id||employeeByUserForScope.get(r.userId)===e.id)&&(r.homeBranchAtMorning===branch||r.homeBranchAtNight===branch))))))
   const admin = payrollAdmins.includes(role)
-  const inp = e => payOf(e, period, attendance, users, payrollInputs, inputs, overtimeRequests)
+  const inp = e => payOf(e, period, attendance, users, payrollInputs, inputs, overtimeRequests, temporaryBranchEnabled ? branchMaster : undefined)
   const ov = (e, periodId = period) => overrideFor(contributionOverrides, e.id, periodId) || {}
-  const pay = (e, periodId = period) => calc(e, periodId === period ? inp(e) : payOf(e, periodId, attendance, users, payrollInputs, inputs, overtimeRequests), ov(e, periodId), 1, branchMaster, { payday: payPeriods.find(p => p.id === periodId)?.half })
+  const pay = (e, periodId = period) => calc(e, periodId === period ? inp(e) : payOf(e, periodId, attendance, users, payrollInputs, inputs, overtimeRequests, temporaryBranchEnabled ? branchMaster : undefined), ov(e, periodId), 1, branchMaster, { payday: payPeriods.find(p => p.id === periodId)?.half })
   const employee = visible.find(x => x.id === selected) || visible[0]
   if (!employee) {
     return (
       <>
-      <SectionTitle eyebrow="PEOPLE OPERATIONS" title="Payroll" description="Auto from Time In / Time Out after you add staff." />
+      <SectionTitle eyebrow="PEOPLE OPERATIONS" title="Payroll" description="Auto from Time In / Time Out after you add staff." action={<Select value={period} onChange={setPeriod} options={payPeriods.map(p=>[p.id,p.label])}/>} />
         <Card><p className="card-note">No employees yet. Add staff under Employees, then they can Time In.</p></Card>
       </>
     )
@@ -58,11 +63,14 @@ export function PayrollPage({
     ...inputs,
     [period + employee.id]: { ...current, [ev.target.name]: ev.target.type === 'checkbox' ? ev.target.checked : ev.target.value }
   })
-  const register = visible.map(e => ({ ...e, c: pay(e), i: inp(e) }))
-  const printedRegister = visible.map(e => { const i=payOf(e,period,attendance,users,payrollInputs,{},overtimeRequests); return {...e,i,c:calc(e,i,ov(e),1,branchMaster,{payday:P?.half})} })
+  const allocations = temporaryBranchEnabled ? visible.map(e => ({ employee:e, input:inp(e), allocation:branchPayrollRows({employee:e,periodId:period,attendance,users,overtimeRequests,total:pay(e),calculate:calc,branchMaster,hasManualAdjustment:hasPayrollAdjustment(payrollInputs.find(x=>x.employeeId===e.id&&x.periodId===period),inp(e).auto)||!!inputs[period+e.id],homeBranchSnapshot:inp(e).obHomeBranch}) })) : []
+  const allocationIssues=allocations.filter(x=>x.allocation.needsReview)
+  const register = temporaryBranchEnabled ? allocations.flatMap(({employee:e,input:i,allocation})=>allocation.rows.filter(r=>branch==='All branches'||r.branch===branch).map(r=>({...e,id:e.id+'@'+r.branch,employeeId:e.id,branch:r.branch,c:r.pay,i:{...i,auto:{...i.auto,needsReview:r.needsReview}}}))) : visible.map(e => ({ ...e, c: pay(e), i: inp(e) }))
+  const printedRegister = temporaryBranchEnabled ? register : visible.map(e => { const i=payOf(e,period,attendance,users,payrollInputs,{},overtimeRequests, temporaryBranchEnabled ? branchMaster : undefined); return {...e,i,c:calc(e,i,ov(e),1,branchMaster,{payday:P?.half})} })
+  const branchTotalsNeedReview = temporaryBranchEnabled && (allocationIssues.length > 0 || register.some(r=>r.i.auto.needsReview?.length))
   const employeeByUser = new Map(users.map(u => [u.id, u.employeeId || u.employee]))
   const historyRows = payPeriods.flatMap(p => {
-    const members = visible.filter(e =>
+    const members = employees.filter(e => payrollEligibleForPeriod(e, p.id) && (branch === 'All branches' || e.branch === branch || temporaryBranchEnabled)).filter(e =>
       payrollInputs.some(input => input.employeeId === e.id && input.periodId === p.id) ||
       attendance.some(row =>
         row.date >= p.from && row.date <= p.to && (row.in || row.nightIn) &&
@@ -70,9 +78,16 @@ export function PayrollPage({
       )
     )
     if (!members.length) return []
+    if (temporaryBranchEnabled) {
+      const names=branch==='All branches'?(branchMaster||seedBranches).map(b=>b.name):[branch]
+      const result=branchPayrollSummary({branches:names,employees:members,attendance,users,payrollInputs,contributionOverrides,overtimeRequests,branchMaster,periodId:p.id,calculate:calc})
+      if(!result.length)return []
+      const count=members.filter(e=>branch==='All branches'||e.branch===branch||(attendanceForBranch(attendance.filter(r=>r.date>=p.from&&r.date<=p.to&&(r.employeeId===e.id||employeeByUser.get(r.userId)===e.id)),branch).length>0||attendance.some(r=>r.date>=p.from&&r.date<=p.to&&(r.employeeId===e.id||employeeByUser.get(r.userId)===e.id)&&(r.homeBranchAtMorning===branch||r.homeBranchAtNight===branch)))).length
+      return [{id:p.id,...p,count,needsReview:result.some(x=>x.needsReview),gross:result.reduce((n,x)=>n+x.gross,0),net:result.reduce((n,x)=>n+x.net,0),source:'Attendance'}]
+    }
     const amounts = members.map(e => calc(
       e,
-      payOf(e, p.id, attendance, users, payrollInputs, {}, overtimeRequests),
+      payOf(e, p.id, attendance, users, payrollInputs, {}, overtimeRequests, temporaryBranchEnabled ? branchMaster : undefined),
       ov(e, p.id),
       1,
       branchMaster,
@@ -87,6 +102,7 @@ export function PayrollPage({
     }]
   })
   const total = k => register.reduce((a, r) => a + r.c[k], 0)
+  const registerEmployeeCount = new Set(register.map(r=>r.employeeId||r.id)).size
   const lines = [
     ['Base shift pay (' + c.days + ' shifts)', c.days * Number(employee.rate || 0), 'plus'],
     ['Night shift pay (' + c.nightShiftDays + ' shifts)', c.nightShiftDays * Number(employee.rate || 0), 'plus'],
@@ -94,6 +110,7 @@ export function PayrollPage({
     ['Night differential (10%)', c.nightPay, 'plus'],
     ['Regular holiday pay (' + c.holidayRegular + ' days)', c.regularHolidayPay, 'plus'],
     ['Special holiday pay (' + c.holidaySpecial + ' days)', c.specialHolidayPay, 'plus'],
+    ['Official business (' + c.obCount + ')', c.obPay, 'plus'],
     ['Officer allowance', c.allowance, 'plus'],
     ['Late deduction', c.lateDed, 'minus'],
     ['Undertime deduction', c.underDed, 'minus'],
@@ -113,6 +130,7 @@ export function PayrollPage({
         holiday: Number(current.holidayRegular ?? current.holiday) || 0,
         holidayRegular: Number(current.holidayRegular ?? current.holiday) || 0,
         holidaySpecial: Number(current.holidaySpecial) || 0,
+        obCount: Number(current.obCount) || 0,
         other: Number(current.other) || 0, reason: payReason
       })
       if (setPayrollInputs) setPayrollInputs(list => [saved, ...list.filter(x => !(x.employeeId === saved.employeeId && x.periodId === saved.periodId))])
@@ -132,7 +150,8 @@ export function PayrollPage({
   return (
     <>
       <div id="payroll-print-source" className="hr-print-source"><PayrollPrint rows={printedRegister} period={{...P,id:period}}/></div>
-      <SectionTitle eyebrow="PEOPLE OPERATIONS" title="Payroll" description="Auto from Time In / Time Out. Admin can update a cutoff with a reason." action={<><Select value={period} onChange={setPeriod} options={payPeriods.map(p => [p.id, p.label])} /><Button variant="secondary" icon={Printer} disabled={register.some(r=>r.i.auto.needsReview?.length)} onClick={() => printHrDocument('payroll-print-source')}>Print payroll register</Button></>} />
+      <SectionTitle eyebrow="PEOPLE OPERATIONS" title="Payroll" description="Auto from Time In / Time Out. Admin can update a cutoff with a reason." action={<><Select value={period} onChange={setPeriod} options={payPeriods.map(p => [p.id, p.label])} /><Button variant="secondary" icon={Printer} disabled={allocationIssues.length>0 || (temporaryBranchEnabled && Object.keys(inputs).length>0) || register.some(r=>r.i.auto.needsReview?.length)} onClick={() => printHrDocument('payroll-print-source')}>Print payroll register</Button></>} />
+      {allocationIssues.length>0&&<div className="notice-line" role="alert">Branch payroll requires Admin review for {allocationIssues.map(x=>x.employee.name).join(', ')}. Totals and printing are unavailable until reconciled.</div>}
       {register.some(r=>r.i.auto.needsReview?.length)&&<div className="notice-line" role="alert">Some attendance records need Admin review (missing time, break, or night overtime). Review Attendance before using or printing these payroll figures.</div>}
       <div className="notice-line"><ShieldCheck size={18} /><span>Duty days come from Time In / Time Out. Enrolled staff: 15th payslip deducts Pag-IBIG ₱200 and PhilHealth ₱337.50, 30th payslip deducts SSS ₱675. Employees whose membership is still being processed stay at ₱0. Employer share is remitted by the clinic, not deducted.</span></div>
       <div className="payroll-header">
@@ -143,7 +162,7 @@ export function PayrollPage({
       <Tabs items={['Payroll register', 'Computation', 'Contribution overrides', 'OT approvals', 'Payroll history']} value={tab} onChange={setTab} />
       {tab === 'Payroll register' && <Card title={'Payroll register · ' + P.label + (branch === 'All branches' ? ' · consolidated' : ' · ' + branch)}>
         <Table pageSize={10} columns={[
-          { label: 'EMPLOYEE', render: r => <div><strong>{r.name}</strong><small className="block-sub">{r.id} · {r.branch}</small></div> },
+          { label: 'EMPLOYEE', render: r => <div><strong>{r.name}</strong><small className="block-sub">{r.employeeId||r.id} · {r.branch}</small></div> },
           { label: 'SOURCE', render: r => <Badge tone={r.i.stored ? 'amber' : 'slate'}>{r.i.stored ? 'Updated' : 'Time In'}</Badge> },
           { label: 'DUTY DAYS', render: r => r.c.calendarDays },
           { label: 'NIGHT SHIFTS', render: r => r.c.nightShiftDays },
@@ -158,10 +177,10 @@ export function PayrollPage({
           { label: 'PAG-IBIG', render: r => money(r.c.pagibig) },
           { label: 'EMPLOYER', render: r => money(remit(r.c)) },
           { label: 'NET PAY', render: r => <strong>{money(r.c.net)}</strong> },
-          { label: '', render: r => <button className="table-link" onClick={() => { setSelected(r.id); setTab('Computation') }}>{admin ? 'Update →' : 'View →'}</button> }
+          { label: '', render: r => <button className="table-link" onClick={() => { setSelected(r.employeeId||r.id); setTab('Computation') }}>{admin ? 'Update →' : 'View →'}</button> }
         ]} rows={register} />
-        <div className="net-line"><span>Total net pay · {register.length} employees</span><strong>{money(total('net'))}</strong></div>
-        <div className="remit-line"><span>Clinic remittance · not deducted</span><strong>{money(register.reduce((a, r) => a + remit(r.c), 0))}</strong></div>
+        <div className="net-line"><span>Total net pay · {registerEmployeeCount} employees</span><strong>{branchTotalsNeedReview?'Review required':money(total('net'))}</strong></div>
+        <div className="remit-line"><span>Clinic remittance · not deducted</span><strong>{branchTotalsNeedReview?'Review required':money(register.reduce((a, r) => a + remit(r.c), 0))}</strong></div>
         <p className="card-note">Employer share follows the employee contribution for this cutoff. PhilHealth and Pag-IBIG match. SSS employer is double, plus EC. SSS is on the 30th. PhilHealth and Pag-IBIG are on the 15th.</p>
       </Card>}
       {tab === 'Computation' && <div className="payroll-layout">
@@ -171,20 +190,20 @@ export function PayrollPage({
               <Field label="Employee" value={selected} options={visible.map(x => [x.id, x.name + ' · ' + x.branch])} onChange={e => setSelected(e.target.value)} />
               <Field label="Branch / shift" value={employee.branch + ' · ' + employee.shift} disabled />
               <Field label="Daily rate" value={money(employee.rate)} disabled />
-              <Field label="Approved hours per day" value={employee.hours} disabled />
+              <Field label="Shift pay basis" value="Morning: 8 hours · Night: 7 hours" disabled />
               <Field label="Approved duty days" name="days" type="number" value={current.days} onChange={upd} disabled={!admin} />
               <Field label="Late minutes" name="late" type="number" value={current.late} onChange={upd} disabled={!admin} />
               <Field label="Undertime minutes" name="undertime" type="number" value={current.undertime} onChange={upd} disabled={!admin} />
               <Field label="Other approved deductions" name="other" type="number" value={current.other} onChange={upd} disabled={!admin} />
             </div>
-            <p className="card-note">{current.stored ? 'Updated by ' + (current.by || 'Admin') + (current.reason ? ' · ' + current.reason : '') : 'Auto from Time In / Time Out for this cutoff (' + (current.auto?.days || 0) + ' days).'} Late / undertime = Daily rate ÷ hours ÷ 60 × minutes.</p>
+            <p className="card-note">{current.stored ? 'Updated by ' + (current.by || 'Admin') + (current.reason ? ' · ' + current.reason : '') : 'Auto from Time In / Time Out for this cutoff (' + (current.auto?.days || 0) + ' days).'} For attendance from Nov 14, 2026: morning deductions use daily rate ÷ 8 ÷ 60; night deductions use daily rate ÷ 7 ÷ 60. Earlier attendance retains its previous basis. Manual minute adjustments in a cutoff with new attendance use the morning basis.</p>
           </Card>
           <Card title="Additional earnings">
             <div className="form-grid">
               <Field label="Scheduled + approved OT hours" value={current.ot || 0} disabled help="Includes scheduled OT and approved requests. Paid at daily rate ÷ 8 × 1.25." />
               <Field label="Night-duty hours" name="night" type="number" value={current.night} onChange={upd} disabled={!admin || !(employee.shift === 'Night Shift' && nightOf(branchMaster, employee.branch))} help="Auto from night Time In / Time Out" />
               <Field label="Regular holiday days" name="holidayRegular" type="number" value={current.holidayRegular ?? current.holiday} onChange={upd} disabled={!admin} help="Daily rate × 100%" />
-              <Field label="Special holiday days" name="holidaySpecial" type="number" value={current.holidaySpecial ?? 0} onChange={upd} disabled={!admin} help="Daily rate × 30%" />
+              <Field label="Special holiday days" name="holidaySpecial" type="number" value={current.holidaySpecial ?? 0} onChange={upd} disabled={!admin} help="Daily rate × 30%" /><Field label="Official business count" name="obCount" type="number" value={current.obCount ?? 0} onChange={upd} disabled={!admin} help={"Each OB is one daily rate; charged to " + (current.obHomeBranch || employee.branch) + "."} />
             </div>
             <p className="card-note">Overtime is filed on Attendance after Time Out. This cutoff pays the approved hours only.</p>
           </Card>
@@ -232,12 +251,12 @@ export function PayrollPage({
           { label: 'STATUS', render: r => <Badge>{r.status}</Badge> },
           { label: 'DECISION', render: r => r.decisionReason || '—' },
           { label: '', render: r => admin && r.employeeId !== employeeId ? <span className="row-actions"><button className="table-link" onClick={() => setDecision({ id: r.id, status: 'Approved', name: r.name, reason: '' })}>Approve</button><button className="table-link" onClick={() => setDecision({ id: r.id, status: 'Rejected', name: r.name, reason: '' })}>Reject</button></span> : <span className="block-sub">{r.employeeId === employeeId ? 'Own request' : ''}</span> }
-        ]} rows={(overtimeRequests || []).filter(r => r.date >= P.from && r.date <= P.to).map(r => { const emp = employees.find(e => e.id === r.employeeId) || {}; return { ...r, name: emp.name || r.employeeId, branch: emp.branch || '—' } }).filter(r => branch === 'All branches' || r.branch === branch)} empty="No overtime filed for this cutoff." />
+        ]} rows={(overtimeRequests || []).filter(r => r.date >= P.from && r.date <= P.to).map(r => { const emp = employees.find(e => e.id === r.employeeId) || {}; const duty=temporaryBranchEnabled?attendance.find(a=>a.date===r.date&&(a.employeeId===r.employeeId||employeeByUser.get(a.userId)===r.employeeId)&&a.in):null; return { ...r, name: emp.name || r.employeeId, branch: duty?.branch || emp.branch || '—' } }).filter(r => branch === 'All branches' || r.branch === branch)} empty="No overtime filed for this cutoff." />
       </Card>}
       {tab === 'Payroll history' && <Card title="Payroll history">
         <Table columns={[
           { label: 'PAY PERIOD', key: 'label' }, { label: 'CUTOFF', render: r => fmt(r.cutoff) }, { label: 'RELEASE', render: r => fmt(r.pay) },
-          { label: 'EMPLOYEES', key: 'count' }, { label: 'GROSS', render: r => money(r.gross) }, { label: 'NET PAY', render: r => <strong>{money(r.net)}</strong> },
+          { label: 'EMPLOYEES', key: 'count' }, { label: 'GROSS', render: r => r.needsReview?'Review required':money(r.gross) }, { label: 'NET PAY', render: r => <strong>{r.needsReview?'Review required':money(r.net)}</strong> },
           { label: 'SOURCE', render: r => <Badge>{r.source}</Badge> }
         ]} rows={historyRows} empty="No payroll history yet. Time In or save a payroll update to create a record." />
         <p className="card-note">Only cutoffs with Time In or a saved payroll update appear. Scheduled OT is included separately from approved requests.</p>
@@ -248,51 +267,56 @@ export function PayrollPage({
 }
 
 export function PayslipsPage({
-  branch, role, employees = [], employeeId, branchMaster, attendance = [], users = [], payrollInputs = [], contributionOverrides = [], overtimeRequests = []
+  branch, role, employees = [], employeeId, branchMaster, attendance = [], users = [], payrollInputs = [], contributionOverrides = [], overtimeRequests = [], temporaryBranchEnabled = false
 }) {
   const listAll = payslipListRoles.includes(role)
   const me = employeeId || ''
-  const eligible = employees.filter(e => e.payroll)
-  const visible = listAll ? scope(eligible, branch) : eligible.filter(e => e.id === me)
-  const [id, setId] = React.useState(visible[0]?.id || me)
   const [period, setPeriod] = React.useState(payPeriods[0].id)
-  const employee = visible.find(x => x.id === id) || visible[0]
+  const eligible = employees.filter(e => payrollEligibleForPeriod(e, period))
   const P = payPeriods.find(p => p.id === period)
+  const byUser = new Map(users.map(u=>[u.id,u.employeeId||u.employee]))
+  const visible = listAll ? eligible.filter(e=>branch==='All branches'||e.branch===branch||(temporaryBranchEnabled&&attendanceForBranch(attendance.filter(r=>r.date>=P.from&&r.date<=P.to&&(r.employeeId===e.id||byUser.get(r.userId)===e.id)),branch).length>0)) : eligible.filter(e => e.id === me)
+  const [id, setId] = React.useState(visible[0]?.id || me)
+  const employee = visible.find(x => x.id === id) || visible[0]
   if (!employee) {
     return (
       <>
-        <SectionTitle eyebrow="PEOPLE OPERATIONS" title="Payslips" description="Payslips are available for payroll-eligible employees." />
+        <SectionTitle eyebrow="PEOPLE OPERATIONS" title="Payslips" description="Payslips are available for payroll-eligible employees." action={<Field label="Payroll period" value={period} options={payPeriods.map(p=>[p.id,p.label])} onChange={e=>setPeriod(e.target.value)}/>} />
         <Card><p className="card-note">No payroll-eligible employee is available for this account or branch.</p></Card>
       </>
     )
   }
-  const current = payOf(employee, period, attendance, users, payrollInputs, {}, overtimeRequests)
+  const current = payOf(employee, period, attendance, users, payrollInputs, {}, overtimeRequests, temporaryBranchEnabled ? branchMaster : undefined)
   const c = calc(employee, current, overrideFor(contributionOverrides, employee.id, period) || {}, 1, branchMaster, { payday: P?.half })
+  const allocationCheck = temporaryBranchEnabled ? branchPayrollRows({employee,periodId:period,attendance,users,overtimeRequests,total:c,calculate:calc,branchMaster,hasManualAdjustment:hasPayrollAdjustment(payrollInputs.find(x=>x.employeeId===employee.id&&x.periodId===period),current.auto),homeBranchSnapshot:current.obHomeBranch}) : null
+  const payslipNeedsReview = temporaryBranchEnabled && (allocationCheck?.needsReview || current.auto.needsReview?.length > 0)
   return (
     <>
-      <SectionTitle eyebrow="PEOPLE OPERATIONS" title="Payslips" description={listAll ? 'Printable payslips. Figures come from Time In unless payroll was updated.' : 'Your payslips from Time In / Time Out.'} action={<Button variant="secondary" icon={Printer} disabled={current.auto.needsReview?.length>0} onClick={() => window.print()}>Print / download payslip</Button>} />
+      <SectionTitle eyebrow="PEOPLE OPERATIONS" title="Payslips" description={listAll ? 'Printable payslips. Figures come from Time In unless payroll was updated.' : 'Your payslips from Time In / Time Out.'} action={<Button variant="secondary" icon={Printer} disabled={payslipNeedsReview || current.auto.needsReview?.length>0} onClick={() => window.print()}>Print / download payslip</Button>} />
       {current.auto.needsReview?.length>0&&<div className="notice-line" role="alert">Attendance on {current.auto.needsReview.join(', ')} requires Admin attendance review. Amounts may be incomplete.</div>}
+      {temporaryBranchEnabled&&<div className="notice-line">This employee payslip combines duties from all branches for the selected cutoff. Branch charges are shown in the payroll register.</div>}
       <div className="payslip-select">
         {listAll && <Field label="Select employee" value={employee.id} options={visible.map(e => [e.id, e.name + ' · ' + e.branch])} onChange={e => setId(e.target.value)} />}
         <Field label="Payroll period" value={period} options={payPeriods.map(p => [p.id, p.label])} onChange={e => setPeriod(e.target.value)} />
         <span>Cutoff: {fmt(P.cutoff)} · Pay date: {fmt(P.pay)} · {current.stored ? 'Updated' : 'Auto from Time In'}</span>
       </div>
-      <div className="payslip-sheet">
+      {payslipNeedsReview&&<div className="notice-line" role="alert">This payroll requires Admin review before the payslip can be shown or printed.</div>}
+      {!payslipNeedsReview&&<div className="payslip-sheet">
         <div className="payslip-brand"><div className="brand-mark"><BrandLogo /></div><div><strong>ARC</strong><span>EMPLOYEE PAYSLIP</span></div><small>{fmt(P.pay)}</small></div>
         <div className="payslip-info">
-          <div><small>EMPLOYEE</small><strong>{employee.name}</strong><span>{employee.id} · {employee.position}</span></div>
+          <div><small>EMPLOYEE</small><strong>{employee.name}</strong><span>{employee.referenceNumber?.trim() ? 'Employee ID: ' + employee.referenceNumber.trim() : 'Employee ID not set'} · {employee.position}</span></div>
           <div><small>BRANCH</small><strong>{employee.branch}</strong><span>{employee.shift}</span></div>
           <div><small>PAY PERIOD</small><strong>{P.label}</strong><span>{c.days} base / {c.nightShiftDays} additional night shifts</span></div>
           <div><small>DAILY RATE</small><strong>{money(employee.rate)}</strong><span>No work, no pay</span></div>
         </div>
         <div className="payslip-columns">
-          <div><h3>Earnings</h3><div><span>Base shift pay</span><strong>{money(c.days*Number(employee.rate||0))}</strong></div><div><span>Night shift pay</span><strong>{money(c.nightShiftDays*Number(employee.rate||0))}</strong></div><div><span>Scheduled and approved overtime</span><strong>{money(c.otPay)}</strong></div><div><span>Night differential</span><strong>{money(c.nightPay)}</strong></div><div><span>Regular holiday pay</span><strong>{money(c.regularHolidayPay)}</strong></div><div><span>Special holiday pay</span><strong>{money(c.specialHolidayPay)}</strong></div><div><span>Officer allowance</span><strong>{money(c.allowance)}</strong></div></div>
+          <div><h3>Earnings</h3><div><span>Base shift pay</span><strong>{money(c.days*Number(employee.rate||0))}</strong></div><div><span>Night shift pay</span><strong>{money(c.nightShiftDays*Number(employee.rate||0))}</strong></div><div><span>Scheduled and approved overtime</span><strong>{money(c.otPay)}</strong></div><div><span>Night differential</span><strong>{money(c.nightPay)}</strong></div><div><span>Regular holiday pay</span><strong>{money(c.regularHolidayPay)}</strong></div><div><span>Special holiday pay</span><strong>{money(c.specialHolidayPay)}</strong></div><div><span>Official business ({c.obCount})</span><strong>{money(c.obPay)}</strong></div><div><span>Officer allowance</span><strong>{money(c.allowance)}</strong></div></div>
           <div><h3>Deductions</h3><div><span>Late</span><strong>{money(c.lateDed)}</strong></div><div><span>Undertime</span><strong>{money(c.underDed)}</strong></div><div><span>SSS</span><strong>{money(c.sss)}</strong></div><div><span>PhilHealth</span><strong>{money(c.phil)}</strong></div><div><span>Pag-IBIG</span><strong>{money(c.pagibig)}</strong></div><div><span>Other approved deductions</span><strong>{money(c.other)}</strong></div></div>
         </div>
         <div className="payslip-net"><span>NET PAY</span><strong>{money(c.net)}</strong></div>
         {listAll && <EmployerBox c={c} />}
         <p>{current.stored ? 'Updated by Admin · ' + (current.reason || '') : 'Auto from Time In / Time Out'}. Scheduled OT and approved post-shift overtime use daily rate ÷ 8 × 1.25.</p>
-      </div>
+      </div>}
     </>
   )
 }

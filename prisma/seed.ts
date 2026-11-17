@@ -28,6 +28,7 @@ async function main() {
   }
   const clinicPasswordHash = clinicOnly ? await argon2.hash(clinicPassword) : null
   await prisma.$transaction(async tx => {
+    await tx.branchSchedule.deleteMany()
     await tx.otherTreatmentPayment.deleteMany()
     await tx.otherTreatment.deleteMany()
     await tx.otherTreatmentCounter.deleteMany()
@@ -51,6 +52,7 @@ async function main() {
     await tx.session.deleteMany()
     await tx.auditLog.deleteMany()
     await tx.registryCounter.deleteMany()
+    await tx.staffSignature.deleteMany()
     await tx.user.deleteMany()
     await tx.employee.deleteMany()
     await tx.branch.deleteMany()

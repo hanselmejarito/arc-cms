@@ -1,6 +1,7 @@
 import React from 'react'
 import { PenLine, Upload, RotateCcw, Check } from 'lucide-react'
 import { Button } from './components'
+import { clearSignatureCanvas } from './signatureCanvas'
 
 export default function SignaturePad({ value, onChange, disabled = false, allowUpload = false }) {
   const [open, setOpen] = React.useState(false)
@@ -9,11 +10,13 @@ export default function SignaturePad({ value, onChange, disabled = false, allowU
   const canvasRef = React.useRef(null)
   const pointerRef = React.useRef(null)
   const drawing = React.useRef(null)
+  const canvasVersion = React.useRef(0)
   const uploadRef = React.useRef(null)
 
   React.useEffect(() => {
     if (!open) return
     const canvas = canvasRef.current
+    const version = ++canvasVersion.current
     const ctx = canvas.getContext('2d')
     const rect = canvas.getBoundingClientRect()
     const ratio = window.devicePixelRatio || 1
@@ -27,13 +30,14 @@ export default function SignaturePad({ value, onChange, disabled = false, allowU
     if (value) {
       const image = new Image()
       image.onload = () => {
-        if (canvasRef.current !== canvas) return
+        if (canvasRef.current !== canvas || canvasVersion.current !== version) return
         const scale = Math.min(rect.width / image.width, rect.height / image.height, 1)
         const w = image.width * scale, h = image.height * scale
         ctx.drawImage(image, (rect.width - w) / 2, (rect.height - h) / 2, w, h)
       }
       image.src = value
     }
+    return () => { canvasVersion.current++ }
   }, [open])
 
   const point = e => {
@@ -104,6 +108,15 @@ export default function SignaturePad({ value, onChange, disabled = false, allowU
     drawing.current = null
     setDraft(compactSignature())
   }
+  const clear = () => {
+    const canvas = canvasRef.current
+    const active = drawing.current
+    drawing.current = null
+    if (canvas && active && canvas.hasPointerCapture?.(active.id)) canvas.releasePointerCapture(active.id)
+    canvasVersion.current++
+    clearSignatureCanvas(canvas)
+    setDraft('')
+  }
   return <div className="signature-control">
     <div className="signature-actions">
       <Button icon={PenLine} variant="secondary" disabled={disabled} onClick={() => { setDraft(value || ''); setOpen(true) }}>{value ? 'Sign again' : 'Sign with pen'}</Button>
@@ -152,7 +165,7 @@ export default function SignaturePad({ value, onChange, disabled = false, allowU
           className="signature-canvas"/>
         <span ref={pointerRef} className="signature-pointer" aria-hidden="true"/>
         <div className="signature-dialog-actions">
-          <Button icon={RotateCcw} variant="secondary" onClick={() => {const c=canvasRef.current;c.getContext('2d').clearRect(0,0,c.width,c.height);setDraft('')}}>Clear</Button>
+          <Button icon={RotateCcw} variant="secondary" onClick={clear}>Clear</Button>
           <div className="signature-actions">
             <Button variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
             <Button icon={Check} disabled={!draft} onClick={() => {onChange(draft, 'pen');setOpen(false)}}>Use signature</Button>

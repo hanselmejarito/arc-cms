@@ -91,6 +91,7 @@ export function encounterClient(e: Encounter) {
     pepEligible: e.pepEligible,
     stopAfter: e.stopAfter,
     animalStatus: e.animalStatus,
+    day14Workflow: e.day14Workflow,
     progress: e.progress,
     doctor: e.doctor,
     doctorSignature: e.doctorSignature,
@@ -169,6 +170,8 @@ export function paymentClient(p: Payment) {
     discountType: p.discountType,
     discountCentavos: p.discountCentavos,
     quantity: p.quantity == null ? null : Number(p.quantity),
+    claimValueCentavos: p.claimValueCentavos,
+    followUpDay: p.followUpDay,
     method: p.method,
     reference: p.reference,
     status: p.status,
@@ -302,7 +305,7 @@ export function refundClient(x: Refund) {
   }
 }
 
-export function employeeClient(x: Employee & { users?: Pick<User, 'email'>[] }) {
+export function employeeClient(x: Employee & { users?: Pick<User, 'email'>[], payrollEligibilityHistory?: { effectivePeriod: string, previousEligible: boolean, eligible: boolean }[] }) {
   const logins = (x.users || []).map(u => u.email)
   return {
     id: x.id,
@@ -317,6 +320,7 @@ export function employeeClient(x: Employee & { users?: Pick<User, 'email'>[] }) 
     status: x.status,
     officer: x.officer,
     payroll: x.payroll,
+    payrollEligibilityHistory: x.payrollEligibilityHistory || [],
     benefits: x.benefits !== false,
     email: logins[0] || '',
     logins
@@ -350,6 +354,17 @@ export function attendanceClient(x: Attendance & { user?: { employeeId: string |
     out: x.clockOut,
     nightIn: x.nightClockIn,
     nightOut: x.nightClockOut,
+    nightBranch: x.nightBranch || (x.nightClockIn ? x.branch : ''),
+    homeBranchAtMorning: x.homeBranchAtMorning,
+    homeBranchAtNight: x.homeBranchAtNight,
+    roleAtMorning: x.roleAtMorning,
+    roleAtNight: x.roleAtNight,
+    rateAtMorning: x.rateAtMorning,
+    rateAtNight: x.rateAtNight,
+    officerAtMorning: x.officerAtMorning,
+    officerAtNight: x.officerAtNight,
+    benefitsAtMorning: x.benefitsAtMorning,
+    benefitsAtNight: x.benefitsAtNight,
     source: x.source,
     branch: x.branch,
     device: x.device,
@@ -368,7 +383,7 @@ function holidayDays(x: { holiday: number, holidaySpecial?: number, holidayType:
   return { holidayRegular: Number(x.holiday) || 0, holidaySpecial: fromColumn || encoded }
 }
 
-export function payrollInputClient(x: { id: string, employeeId: string, periodId: string, days: number, late: number, undertime: number, night: number, ot: number, otApproved: boolean, holiday: number, holidaySpecial?: number, holidayType: string, other: number, reason: string, by: string }) {
+export function payrollInputClient(x: { id: string, employeeId: string, periodId: string, days: number, late: number, undertime: number, night: number, ot: number, otApproved: boolean, holiday: number, holidaySpecial?: number, holidayType: string, obCount?: number, obHomeBranch?: string, other: number, reason: string, by: string }) {
   const days = holidayDays(x)
   return {
     id: x.id,
@@ -384,6 +399,8 @@ export function payrollInputClient(x: { id: string, employeeId: string, periodId
     holidayRegular: days.holidayRegular,
     holidaySpecial: days.holidaySpecial,
     holidayType: x.holidayType,
+    obCount: x.obCount || 0,
+    obHomeBranch: x.obHomeBranch || '',
     other: x.other,
     reason: x.reason,
     by: x.by

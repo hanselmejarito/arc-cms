@@ -1,6 +1,7 @@
 import type { Branch, InventoryLine, LedgerRow, PrismaClient } from '@prisma/client'
 import { addDays, clinicDate } from './clinical.js'
 import { nextId } from './ids.js'
+import { branchNightAt } from './branchSchedules.js'
 
 type Tx = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>
 
@@ -51,7 +52,11 @@ export async function catchUpBranch(tx: Tx, branchName: string, signature = 'Sys
     const ls = await tx.inventoryLine.findMany({ where: { branch: branchName } })
     const stale = ls.filter(x => x.date < today)
     if (!stale.length) break
-    await closeShiftOnce(tx, branchRow, stale, signature)
+    if (process.env.TEMPORARY_BRANCH_ENABLED === 'true') {
+      const first=stale.slice().sort((a,b)=>a.date.localeCompare(b.date)||a.shift.localeCompare(b.shift))[0]
+      const sameShift=stale.filter(x=>x.date===first.date&&x.shift===first.shift)
+      await closeShiftOnce(tx, {...branchRow,night:await branchNightAt(tx,branchRow,first.date)}, sameShift, signature)
+    } else await closeShiftOnce(tx, branchRow, stale, signature)
     closed++
   }
   return closed

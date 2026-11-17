@@ -41,7 +41,7 @@ export const updateUserApi = (id, body) => api('/api/users/' + encodeURIComponen
 export const saveBranchApi = (name, body) => api('/api/branches/' + encodeURIComponent(name), { method: 'PATCH', body })
 export const timeInApi = body => api('/api/attendance/in', { body })
 export const timeOutApi = () => api('/api/attendance/out', { method: 'POST' })
-export const nightTimeInApi = () => api('/api/attendance/night/in', { method: 'POST' })
+export const nightTimeInApi = body => api('/api/attendance/night/in', { method: 'POST', ...(body ? { body } : {}) })
 export const nightTimeOutApi = () => api('/api/attendance/night/out', { method: 'POST' })
 export const correctAttendanceApi = body => api('/api/attendance/correct', { body })
 export const reviewBreakApi = body => api('/api/attendance/break-review', { body })

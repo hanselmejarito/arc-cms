@@ -1,11 +1,14 @@
+import { formatTime12 } from './timeFormat'
 import { previewShift, previewNightPay } from '../lib/shiftPreview'
 export const clinicDate=()=>new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'})
 export const today=clinicDate()
 export const longDate=(d=clinicDate())=>{const x=new Date(d.slice(0,10)+'T00:00:00+08:00');return x.toLocaleDateString('en-US',{weekday:'long',timeZone:'Asia/Manila'}).toUpperCase()+' · '+x.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric',timeZone:'Asia/Manila'}).toUpperCase()}
 export const shiftWindows={MS:{label:'Morning Shift',start:'07:00',end:'16:00',display:'7:00 AM – 4:00 PM'},NS:{label:'Night Shift',start:'16:00',end:'23:00',display:'4:00 PM – 11:00 PM'},PO_MS:{label:'Morning Shift',start:'08:00',end:'17:00',display:'8:00 AM – 5:00 PM'}}
 export const shiftCutoff='16:00'
-export function dutyHours(role,shift='Morning Shift',branch='',date=''){if(shift==='Night Shift'||shift==='NS')return shiftWindows.NS;if(['Muñoz','Palayan'].includes(branch)&&date>='2026-11-11')return {label:'Morning Shift',start:'08:00',end:'18:00',display:'8:00 AM – 6:00 PM'};if(role==='PhilHealth Officer')return shiftWindows.PO_MS;return shiftWindows.MS}
-export function overtimeRoom(role,shift,clockOut,branch='',date=''){const end=toMins(dutyHours(role,shift,branch,date).end),out=toMins(clockOut),grace=['Muñoz','Palayan'].includes(branch)&&date>='2026-11-11'?15:0;if(out==null||end==null||out<=end+grace)return 0;return grace?Math.round((out-end-grace)/60*10000)/10000:Math.round((out-end)/60*100)/100}
+export const branchScheduleAt=(branch,date)=>(branch?.schedules||[]).filter(s=>s.effectiveFrom<=date).sort((a,b)=>b.effectiveFrom.localeCompare(a.effectiveFrom))[0]
+export function branchShiftAvailable(branch,shift,date){if(!branch||branch.status!=='Active')return false;if(shift!=='night')return !!branch.morning;return branchScheduleAt(branch,date)?.nightEnabled??!!branch.night}
+export function dutyHours(role,shift='Morning Shift',branch='',date='',branchConfig){const night=shift==='Night Shift'||shift==='NS';const schedule=branchScheduleAt(branchConfig?.find(b=>b.name===branch),date);if(schedule){if(night&&!schedule.nightEnabled)return {...shiftWindows.NS,configured:true,enabled:false};const start=night?schedule.nightStart:role==='Nurse'?schedule.nurseStart:schedule.morningStart,end=night?schedule.nightEnd:role==='Nurse'?schedule.nurseEnd:schedule.morningEnd;if(start&&end)return {label:night?'Night Shift':'Morning Shift',start,end,display:formatTime12(start)+' – '+formatTime12(end),configured:true,enabled:night?schedule.nightEnabled:true}}if(night)return shiftWindows.NS;if(['Muñoz','Palayan'].includes(branch)&&date>='2026-11-11')return {label:'Morning Shift',start:'08:00',end:'18:00',display:'8:00 AM – 6:00 PM'};if(role==='PhilHealth Officer'||(date>='2026-11-14'&&(['Admin','Secretary'].includes(role)||(role==='Nurse'&&!['Guimba','Cabanatuan'].includes(branch)))))return shiftWindows.PO_MS;return shiftWindows.MS}
+export function overtimeRoom(role,shift,clockOut,branch='',date='',branchConfig){const end=toMins(dutyHours(role,shift,branch,date,branchConfig).end),out=toMins(clockOut),grace=(date>='2026-11-14'||['Muñoz','Palayan'].includes(branch)&&date>='2026-11-11')?15:0;if(out==null||end==null||out<=end+grace)return 0;return grace?Math.round((out-end-grace)/60*10000)/10000:Math.round((out-end)/60*100)/100}
 export const toMins=t=>{if(!t)return null;const p=t.split(':');return Number(p[0])*60+Number(p[1])}
 export const pad=(n,l=2)=>String(n).padStart(l,'0')
 export const addDays=(d,n)=>{const x=new Date(d.slice(0,10)+'T00:00:00Z');x.setUTCDate(x.getUTCDate()+n);return x.toISOString().slice(0,10)}
@@ -27,10 +30,10 @@ export const branchMaster=[
 {name:'Baloc',address:'HLD Bldg, Purok 3, Baloc, Sto. Domingo, Nueva Ecija',contact:'0953 665 5592',hours:'Daily 8AM–5PM',accreditation:'Not accredited',night:false},
 {name:'Talavera',address:'Maharlika Highway, Brgy. Maestrang Kikay, Talavera, Nueva Ecija',contact:'0955 760 7872',hours:'Daily 8AM–5PM',accreditation:'Accredited',night:false},
 {name:'Cabanatuan',address:'Stall No. 20, Mabini Arcade, Mabini St., Quezon District, Cabanatuan City, Nueva Ecija',contact:'0952 528 2411',hours:'Daily 7AM–11PM',accreditation:'Accredited',night:true},
-{name:'Palayan',address:'Aurora Road, Camino, Palayan City, Nueva Ecija',contact:'0997 096 8033',hours:'Daily 8AM–5PM',accreditation:'Not accredited',night:false},
+{name:'Palayan',address:'Aurora Road, Camino, Palayan City, Nueva Ecija',contact:'0997 096 8033',hours:'Daily 8AM–6PM',accreditation:'Not accredited',night:false},
 {name:'Laur',address:'Gen. Tinio St., Brgy. I, Laur, Nueva Ecija',contact:'0997 652 7942',hours:'Daily 8AM–5PM',accreditation:'Not accredited',night:false},
 {name:'Paniqui',address:'BLMGH Center, Zamora St., Poblacion Sur, Paniqui, Tarlac',contact:'0953 127 8974',hours:'Daily 8AM–5PM',accreditation:'Not accredited',night:false},
-{name:'Rizal',address:'KBMG Bldg, Poblacion Sur, Rizal, Nueva Ecija',contact:'0945 210 0188',hours:'Daily 7AM–5PM',accreditation:'Accredited',night:false},
+{name:'Rizal',address:'KBMG Bldg, Poblacion Sur, Rizal, Nueva Ecija',contact:'0945 210 0188',hours:'Daily 8AM–5PM',accreditation:'Accredited',night:false},
 {name:'Talugtug',address:'Zone 5, Talugtug, Nueva Ecija',contact:'0975 784 5887',hours:'Daily 8AM–5PM',accreditation:'Not accredited',night:false},
 {name:'Gapan',address:'Gapan City, Nueva Ecija',contact:'0915 754 1632',hours:'Daily 8AM–5PM',accreditation:'Not accredited',night:false},
 {name:'Muñoz',address:'2/F Drawwing Bldg, D. Delos Santos St., Poblacion East, Science City of Muñoz, Nueva Ecija',contact:'0953 105 8993',hours:'Daily 8AM–6PM',accreditation:'Accredited',night:false},
@@ -53,7 +56,7 @@ export const animalStatuses=['Alive','Lost/Stray','Dead']
 const idDays=[['D0',0],['D3',3],['D7',7],['D28',28]],idDays14=[['D0',0],['D3',3],['D7',7],['D14',14],['D28',28]]
 export const observationEnd=e=>{const start=(e.biteDate||e.seriesStartDate||e.date||'').slice(0,10);return start?addDays(start,14):''}
 export function day14Required(e,allDoses=[]){if(e.preExp||e.booster||(e.regimen||'ID')!=='ID')return false;const until=observationEnd(e);if(!until)return false;const reported=linkedDoses(e,allDoses).filter(d=>d.animalStatus==='Lost/Stray'||d.animalStatus==='Dead').map(d=>d.date).filter(Boolean).sort()[0];if(reported)return reported<=until;if(e.animalStatus==='Lost/Stray'||e.animalStatus==='Dead')return (e.date||until).slice(0,10)<=until;return false}
-export const protocolOf=(e,allDoses=[])=>{const route=protocols[e.regimen]?.route||'ID';if(e.preExp)return {...protocols.PREEXP,route,label:`Pre-exposure (${route})`};if(e.booster)return {...protocols.BOOSTER,route,label:`Booster (${route})`};if(e.regimen==='IM')return protocols.IM;return {label:'Intradermal (ID)',route:'ID',days:day14Required(e,allDoses)?idDays14:idDays}}
+export const protocolOf=(e,allDoses=[])=>{const route=protocols[e.regimen]?.route||'ID';if(e.preExp)return {...protocols.PREEXP,route,label:`Pre-exposure (${route})`};if(e.booster)return {...protocols.BOOSTER,route,label:`Booster (${route})`};if(e.regimen==='IM')return protocols.IM;if(e.day14Workflow==='optional')return {label:'Intradermal (ID)',route:'ID',days:linkedDoses(e,allDoses).some(d=>d.day==='D14')?idDays14:idDays};return {label:'Intradermal (ID)',route:'ID',days:day14Required(e,allDoses)?idDays14:idDays}}
 
 export const suffixes=['Jr.','Sr.','II','III','IV']
 export function fullName(p){const last=(p.last||'').trim(),first=(p.first||'').trim(),mid=(p.middle||'').trim(),suf=(p.suffix||'').trim(),mi=mid?mid[0].toUpperCase()+'.':'';return [last&&first?last+', '+first:last||first,mi,suf].filter(Boolean).join(' ')}
@@ -71,7 +74,7 @@ patients[0]={...patients[0],branch:'Baloc'}
 
 const animals=['Dog','Dog','Cat','Dog','Cat','Dog','Others'],sites=['Head','Upper extremity','Hand','Lower extremity','Foot'],wounds=[['Abrasion'],['Lacerated'],['Bruised'],['Abrasion','Lacerated'],['Lacerated']],times=['08:15 AM','09:40 AM','10:20 AM','01:30 PM','03:05 PM','06:45 PM']
 export const isActiveNurse=e=>e.role==='Nurse'&&(e.status||'Active')!=='Inactive'
-export const nursesAt=(emps,branch)=>(emps||[]).filter(e=>isActiveNurse(e)&&e.branch===branch)
+export const nursesAt=(emps,branch)=>(emps||[]).filter(e=>isActiveNurse(e)&&('dutyBranch' in e?e.dutyBranch:e.branch)===branch)
 export const vaccinatorNames=(emps,branch)=>nursesAt(emps,branch).map(e=>e.name)
 const rawEncounters=patients.map((p,i)=>{const date=addDays(today,-((i*7)%92)),nonBite=i%9===5,site=sites[i%sites.length],category=nonBite?'I':(['Head','Hand','Foot'].includes(site)?'III':['II','III','II','III','II'][i%5]),booster=category!=='I'&&i%10===4,stray=i%4===3,animal=animals[i%7],rig=category==='III'&&!booster?(i%11===0?'HRIG':'ERIG'):'';return {id:'ENC-'+pad(i+1,4),patientId:p.id,branch:p.branch,date,time:times[i%6],chief:nonBite?'Lick on intact skin':'Bitten on the '+site.toLowerCase(),animal,animalOther:animal==='Others'?'Pig':'',biteType:nonBite?'Non-Bite':'Bite',pet:!stray,vaccinated:!stray&&i%3===0,stray,owned:!stray,owner:stray?'':i%2?'Own pet':'Neighbor',biteDate:addDays(date,-(i%2)),biteTime:'07:30 AM',side:i%2?'R':'L',site,place:'Brgy. '+barangays[(i+2)%6]+', '+p.municipality,washed:i%5!==2,tandok:i%8===3,wound:nonBite?[]:wounds[i%5],category,booster,preExp:false,vaccine:'PVRV',brand:'Bioshoot',regimen:i%6===5?'IM':'ID',history:{iddm:i%14===3,kidney:false,dialysis:false,cancer:false,allergy:i%9===2,steroids:false,insulin:i%14===3,others:''},bp:['110/70','120/80','130/85','118/76'][i%4],weight:String(p.age<15?18+p.age*2:52+i%20),temp:['36.5','36.8','37.1','36.6'][i%4],consent:true,consentBy:p.guardian?p.guardian.split(' (')[0]:p.name,tt:{given:!nonBite&&i%4!==2,date:nonBite?'':date,time:times[i%6],refused:!nonBite&&i%4===2,withPrevious:i%4===1},rig,erig:rig?{brand:rig==='HRIG'?'HRIG':i%2?'Vinrab':'Equirab',date,skinTime:rig==='ERIG'?times[i%6]:'',skinResult:rig==='ERIG'?'Negative':'',weight:String(p.age<15?18+p.age*2:52+i%20),infiltration:true,ml:String(p.age<15?2:5),refused:false}:{brand:'',date:'',skinTime:'',skinResult:'',weight:'',infiltration:null,ml:'',refused:false},pepEligible:category!=='I'&&i%13!==7,stopAfter:i%10===7?2:[13,22].includes(i)?1:null,animalStatus:i%12===5?'Lost/Stray':i%17===9?'Dead':'Alive',progress:{healthy:false,healed:false,others:''},doctor:'Dr. A. Bautista',remark:'',transferredTo:'',died:false,rer:true}})
 rawEncounters[14]={...rawEncounters[14],date:today,biteDate:today,time:'09:15 AM',chief:'',site:'',category:'',wound:[],rig:'',rer:false}
@@ -148,7 +151,7 @@ export function lineService(p){
   if(!name||name==='Not set yet')return ''
   if(p.classification==='Other treatment')return name
   const price=servicePrice(name)
-  const qty=price&&Number(p.amount)>0?Math.max(1,Math.round(Number(p.amount)/price)):1
+  const qty=p.claimValueCentavos!=null?Number(p.quantity)||1:price&&Number(p.amount)>0?Math.max(1,Math.round(Number(p.amount)/price)):1
   return qty>1?name+' × '+qty:name
 }
 export function groupBills(list){
@@ -180,6 +183,8 @@ export function groupBills(list){
       service:names.length?names.join(', '):'Not set yet',
       classification:first.classification,
       amount,
+      claimValueCentavos:lines.reduce((s,p)=>s+Number(p.claimValueCentavos||0),0),
+      followUpDay:first.followUpDay||null,
       method:methods[0]||first.method||'—',
       reference:refs[0]||first.reference||'—',
       status,
@@ -188,7 +193,7 @@ export function groupBills(list){
     }
   })
 }
-export const visitNeedsPay=e=>e&&(!!e.booster||(e.billing==='Walk-in'&&e.category!=='I'))
+export const visitNeedsPay=e=>e&&(!!e.booster||!!e.preExp||(e.billing==='Walk-in'&&e.category!=='I'))
 export const visitPaid=(pays,eid)=>(pays||[]).some(p=>p.encounterId===eid&&p.status==='Paid'&&Number(p.amount)>0)
 export const payments=encounters.filter(e=>!e.past&&e.rer!==false).slice().sort((a,b)=>b.date.localeCompare(a.date)).slice(0,18).map((e,k)=>{const p=patients.find(x=>x.id===e.patientId),s=e.rig?services[1]:e.booster?services[2]:e.category==='I'?services[6]:services[0],ph=isPhilhealthBill(e.billing);return {id:'PAY-'+(2060+k),registry:e.registry,encounterId:e.id,patient:p.name,branch:e.branch,date:e.date,service:s.name,classification:ph?e.billing:p.classification,amount:ph?0:s.price,method:e.billing==='For PhilHealth'?'—':ph?'PhilHealth':k%3===1?'GCash':'Cash',reference:ph?'—':'EXT-'+(45820+k),status:ph?'Not billed':k===7?'Pending':'Paid',remarks:e.billing==='For PhilHealth'?'Not billed · give Day 0 then refer for PhilHealth':e.billing==='PhilHealth'?'₱0 · PhilHealth':''}})
 if(julesOrigin&&!payments.some(pay=>pay.encounterId===julesOrigin.id)){const p=patients.find(x=>x.id===julesOrigin.patientId);payments.unshift({id:'PAY-2063',registry:julesOrigin.registry,encounterId:julesOrigin.id,patient:p.name,branch:julesOrigin.branch,date:julesOrigin.date,service:services[0].name,classification:'For PhilHealth',amount:0,method:'—',reference:'—',status:'Not billed',remarks:'Not billed · give Day 0 then refer for PhilHealth'})}
@@ -272,41 +277,48 @@ export function buildPayPeriods(asOf=today,count=6){
 }
 export const payPeriods=buildPayPeriods()
 export function mergeAttendanceByDate(rows){const by={};for(const r of rows||[]){const cur=by[r.date];if(!cur){by[r.date]={...r};continue}const inA=toMins(cur.in),inB=toMins(r.in),outA=toMins(cur.out),outB=toMins(r.out);by[r.date]={...cur,in:inA==null?r.in:(inB!=null&&inB<inA?r.in:cur.in),out:outB==null?cur.out:(outA==null||outB>outA?r.out:cur.out)}}return Object.values(by)}
-export function periodInputsFromAttendance(e,periodId,attendance=[],users=[],overtimeRequests=[]){
+export function periodInputsFromAttendance(e,periodId,attendance=[],users=[],overtimeRequests=[],branchConfig){
  const p=payPeriods.find(x=>x.id===periodId),ids=new Set((users||[]).filter(u=>(u.employeeId||u.employee)===e.id).map(u=>u.id))
  const rows=mergeAttendanceByDate((attendance||[]).filter(a=>{if(p&&((p.from&&a.date<p.from)||(p.to&&a.date>p.to)))return false;return a.employeeId===e.id||(ids.size&&ids.has(a.userId))}))
  const isNew=r=>['Muñoz','Palayan'].includes(r.branch||e.branch)&&r.date>='2026-11-11'
- let late=0,undertime=0,night=0,scheduledOtMinutes=0,nightShiftDays=0,nightLate=0,nightUndertime=0,nightShiftMinutes=0
+ let late=0,undertime=0,night=0,scheduledOtMinutes=0,nightShiftDays=0,nightLate=0,nightUndertime=0,nightShiftMinutes=0,shiftBasisLate=0,shiftBasisUndertime=0,shiftBasisNightLate=0,shiftBasisNightUndertime=0,shiftBasisLegacyNightHours=0
  const needsReview=[]
  for(const r of rows){
-  const win=dutyHours(e.role,(isNew(r)||r.nightIn)?'Morning Shift':e.shift,r.branch||e.branch,r.date)
-  if(isNew(r)){
+  const lateBefore=late,undertimeBefore=undertime
+  const win=dutyHours(r.roleAtMorning||e.role,(r.roleAtMorning||isNew(r)||r.nightIn)?'Morning Shift':e.shift,r.branch||e.branch,r.date,branchConfig)
+  if((r.in||!r.nightIn)&&(isNew(r)||(branchConfig&&r.roleAtMorning)||(win.configured&&win.label==='Morning Shift'))){
    const rawLate=r.in?Math.max(0,(toMins(r.in)??0)-toMins(win.start)):0
    late+=Math.max(0,rawLate-20)
-   if(!r.in||!r.out){needsReview.push(r.date);continue}
+   if(!r.in||!r.out){if(r.date>='2026-11-14')shiftBasisLate+=late-lateBefore;needsReview.push(r.date);continue}
    try{
+    if(win.configured){const scheduled=toMins(win.end)-toMins(win.start)-60;if(scheduled!==480&&!(isNew(r)&&scheduled===540))needsReview.push(r.date+' (schedule policy)')}
     const calc=previewShift({shift:'morning',scheduledStart:win.start,scheduledEnd:win.end,clockIn:r.in,clockOut:r.out,...(r.reviewedBreakMinutes==null?{}:{reviewedBreakMinutes:r.reviewedBreakMinutes})})
-    const partial=toMins(r.in)>toMins(win.start)||toMins(r.out)<toMins(win.end)
+    const partial=(r.date>='2026-11-17'?rawLate>20:rawLate>0)||toMins(r.out)<toMins(win.end)
     if(partial&&r.reviewedBreakMinutes==null)needsReview.push(r.date)
-    else scheduledOtMinutes+=calc.scheduledOvertimeMinutes
+    else if(isNew(r))scheduledOtMinutes+=calc.scheduledOvertimeMinutes
+    else if(calc.scheduledOvertimeMinutes>0)needsReview.push(r.date+' (extra work review)')
     const scheduledWork=Math.max(0,Math.min(toMins(r.out),toMins(win.end))-toMins(r.in)-calc.mealMinutes)
-    undertime+=Math.max(0,480-scheduledWork-Math.max(0,rawLate-20))
+    undertime+=Math.max(0,480-scheduledWork-(r.date>='2026-11-17'?rawLate:Math.max(0,rawLate-20)))
    }catch{needsReview.push(r.date)}
   }else{
-   if(r.in)late+=Math.max(0,(toMins(r.in)??0)-toMins(win.start))
+   if(r.in)late+=Math.max(0,(toMins(r.in)??0)-toMins(win.start)-((r.date>='2026-11-15'||(r.date>='2026-11-14'&&win.label==='Morning Shift'))?20:0))
    if(r.out)undertime+=Math.max(0,toMins(win.end)-(toMins(r.out)??toMins(win.end)))
-   if(e.shift==='Night Shift'&&!r.nightIn&&r.in&&r.out){const mins=(toMins(r.out)??0)-(toMins(r.in)??0);if(mins>0)night+=mins/60}
+   if(e.shift==='Night Shift'&&!r.roleAtMorning&&!r.nightIn&&r.in&&r.out){const start=toMins(r.in)??0,end=toMins(r.out)??0,mins=end-start;if(mins>0){const hours=r.date>='2026-11-14'?Math.max(0,Math.min(end,1380)-Math.max(start,1320))/60:mins/60;night+=hours;if(r.date>='2026-11-14')shiftBasisLegacyNightHours+=hours}}
   }
   if(r.nightIn){
    if(!r.nightOut){needsReview.push(r.date+' (night)')}else{
-    try{if(toMins(r.nightOut)>1380)needsReview.push(r.date+' (night overtime)');const n=previewNightPay({dailyRateCentavos:70000,clockIn:r.nightIn,clockOut:r.nightOut,nightDifferentialRate:0});nightShiftDays++;nightShiftMinutes+=n.nightMinutes;nightLate+=Math.max(0,Math.min(420,toMins(r.nightIn)-960));nightUndertime+=Math.max(0,n.missedMinutes-Math.max(0,Math.min(420,toMins(r.nightIn)-960)))}catch{needsReview.push(r.date+' (night)')}
+    try{const nw=dutyHours(r.roleAtNight||e.role,'Night Shift',r.nightBranch||r.branch||e.branch,r.date,branchConfig);if(nw.enabled===false)throw Error('Night duty disabled');if(toMins(r.nightOut)>toMins(nw.end))needsReview.push(r.date+' (night overtime)');const n=previewNightPay({dailyRateCentavos:70000,clockIn:r.nightIn,clockOut:r.nightOut,nightDifferentialRate:0,scheduledStart:nw.start,scheduledEnd:nw.end});const rawNightLate=Math.max(0,Math.min(420,toMins(r.nightIn)-toMins(nw.start)));nightShiftDays++;nightShiftMinutes+=n.nightMinutes;nightLate+=Math.max(0,rawNightLate-(r.date>='2026-11-15'?20:0));nightUndertime+=Math.max(0,n.missedMinutes-rawNightLate)}catch{needsReview.push(r.date+' (night)')}
    }
+  }
+  if(r.date>='2026-11-14'){
+   if(e.shift==='Night Shift'&&!r.roleAtMorning&&!r.nightIn&&!isNew(r)){shiftBasisNightLate+=late-lateBefore;shiftBasisNightUndertime+=undertime-undertimeBefore}
+   else{shiftBasisLate+=late-lateBefore;shiftBasisUndertime+=undertime-undertimeBefore}
   }
  }
  const worked=new Set(rows.filter(r=>r.in||r.nightIn).map(r=>r.date)),holidayRegular=(p?.holidays||[]).filter(h=>h[2]!=='Special'&&worked.has(h[0])).length,holidaySpecial=(p?.holidays||[]).filter(h=>h[2]==='Special'&&worked.has(h[0])).length
- const approved=(overtimeRequests||[]).filter(r=>r.employeeId===e.id&&r.status==='Approved'&&(!p||(r.date>=p.from&&r.date<=p.to))).reduce((sum,r)=>{const row=rows.find(x=>x.date===r.date);return sum+(row&&isNew(row)?Math.min(Number(r.hours)||0,overtimeRoom(e.role,'Morning Shift',row.out,row.branch||e.branch,row.date)):(Number(r.hours)||0))},0)
+ const approved=(overtimeRequests||[]).filter(r=>r.employeeId===e.id&&r.status==='Approved'&&(!p||(r.date>=p.from&&r.date<=p.to))).reduce((sum,r)=>{const row=rows.find(x=>x.date===r.date);return sum+(row&&(isNew(row)||branchConfig)?Math.min(Number(r.hours)||0,overtimeRoom(row.roleAtMorning||e.role,'Morning Shift',row.out,row.branch||e.branch,row.date,branchConfig)):(Number(r.hours)||0))},0)
  const otHours=Number((approved+scheduledOtMinutes/60).toFixed(4))
- return {days:rows.filter(r=>r.in).length,calendarDays:worked.size,nightShiftDays,nightLate,nightUndertime,nightShiftMinutes,late,undertime,ot:otHours,scheduledOt:Number((scheduledOtMinutes/60).toFixed(2)),needsReview:[...new Set(needsReview)],otApproved:otHours>0,night:Number(night.toFixed(2)),holiday:holidayRegular,holidayRegular,holidaySpecial,holidayType:'Regular',other:0,source:'attendance'}
+ return {days:rows.filter(r=>r.in).length,calendarDays:worked.size,nightShiftDays,nightLate,nightUndertime,nightShiftMinutes,late,undertime,shiftBasisLate,shiftBasisUndertime,shiftBasisNightLate,shiftBasisNightUndertime,shiftBasisLegacyNightHours:Number(shiftBasisLegacyNightHours.toFixed(2)),hasShiftBasisAttendance:rows.some(r=>r.date>='2026-11-14'),ot:otHours,scheduledOt:Number((scheduledOtMinutes/60).toFixed(2)),needsReview:[...new Set(needsReview)],otApproved:otHours>0,night:Number(night.toFixed(2)),holiday:holidayRegular,holidayRegular,holidaySpecial,holidayType:'Regular',other:0,source:'attendance'}
 }
 export const periodInputs=(e,periodId,attendance,users)=>periodInputsFromAttendance(e,periodId,attendance,users)
 const shiftDays=['2026-09-28','2026-09-29','2026-09-30','2026-10-01','2026-10-02','2026-10-03','2026-10-05','2026-10-06','2026-10-07']

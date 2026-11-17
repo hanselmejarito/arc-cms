@@ -1,0 +1,8 @@
+const fs=require('fs'),ts=require('typescript'),assert=require('node:assert/strict')
+function load(file,deps){const js=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;const out={};new Function('require','exports',js)(n=>n in deps?deps[n]:require(n),out);return out}
+const schedules=load('lib/branchSchedules.ts',{})
+const clinical={clinicDate:()=> '2026-11-16',addDays:(d,n)=>new Date(Date.parse(d+'T00:00:00Z')+n*86400000).toISOString().slice(0,10)}
+const shifts=load('lib/shiftClose.ts',{'./clinical.js':clinical,'./ids.js':{nextId:async()=>String(Math.random())},'./branchSchedules.js':schedules})
+let line={id:'one',item:'Test',branch:'Test',date:'2026-11-14',shift:'MS',begin:1,received:0,used:0,stock:1},ledger=[]
+const db={branch:{findUnique:async()=>({name:'Test',night:false})},branchSchedule:{findFirst:async({where})=>where.effectiveFrom.lte>='2026-11-15'?{nightEnabled:true}:null},movement:{findMany:async()=>[]},inventoryLine:{findMany:async()=>[line],update:async({data})=>(line={...line,...data})},ledgerRow:{create:async({data})=>(ledger.push(data),data)}}
+;(async()=>{process.env.TEMPORARY_BRANCH_ENABLED='true';try{assert.equal(await shifts.catchUpBranch(db,'Test'),3);assert.deepEqual(ledger.map(x=>[x.date,x.shift]),[['2026-11-14','MS'],['2026-11-15','MS'],['2026-11-15','NS']]);assert.equal(line.date,'2026-11-16');assert.equal(line.shift,'MS');console.log('Effective-date inventory shift catch-up: PASS')}finally{delete process.env.TEMPORARY_BRANCH_ENABLED}})().catch(e=>{console.error(e);process.exitCode=1})

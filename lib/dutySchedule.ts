@@ -5,7 +5,7 @@ export type DutyWindow = {
   flexibleMealMinutes?: number
 }
 
-const NIGHT: DutyWindow = { start: '16:00', end: '23:00', regularHours: 8 }
+const NIGHT: DutyWindow = { start: '16:00', end: '23:00', regularHours: 7 }
 const OFFICER: DutyWindow = { start: '08:00', end: '17:00', regularHours: 8 }
 const MORNING: DutyWindow = { start: '07:00', end: '16:00', regularHours: 8 }
 const BRANCH_MORNING: DutyWindow = { start: '08:00', end: '18:00', regularHours: 8, flexibleMealMinutes: 60 }
@@ -13,7 +13,7 @@ const BRANCH_MORNING: DutyWindow = { start: '08:00', end: '18:00', regularHours:
 export function dutyWindow(input: { branch?: string; role: string; shift: string; date: string; effectiveFrom: string }): DutyWindow {
   if (input.shift === 'Night Shift' || input.shift === 'NS') return NIGHT
   if (['Muñoz', 'Palayan'].includes(input.branch || '') && input.effectiveFrom && input.date >= input.effectiveFrom) return BRANCH_MORNING
-  return input.role === 'PhilHealth Officer' ? OFFICER : MORNING
+  return input.role === 'PhilHealth Officer' || (input.date >= '2026-11-14' && (['Admin', 'Secretary'].includes(input.role) || (input.role === 'Nurse' && !['Guimba', 'Cabanatuan'].includes(input.branch || '')))) ? OFFICER : MORNING
 }
 
 function minutes(value: string): number {

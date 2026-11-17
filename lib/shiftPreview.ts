@@ -28,6 +28,8 @@ export function previewNightPay(input: {
   clockIn: string
   clockOut: string
   nightDifferentialRate: number
+  scheduledStart?: string
+  scheduledEnd?: string
 }) {
   const { dailyRateCentavos, nightDifferentialRate } = input
   if (!Number.isSafeInteger(dailyRateCentavos) || dailyRateCentavos < 0 ||
@@ -35,7 +37,8 @@ export function previewNightPay(input: {
     throw new Error('Invalid rate.')
   const start = parse(input.clockIn), end = parse(input.clockOut)
   if (end <= start) throw new Error('Invalid shift interval.')
-  const scheduledStart = 16 * 60, scheduledEnd = 23 * 60
+  const scheduledStart = parse(input.scheduledStart || '16:00'), scheduledEnd = parse(input.scheduledEnd || '23:00')
+  if (scheduledEnd - scheduledStart !== 420) throw new Error('Night shift duration requires payroll review.')
   const worked = overlap(start, end, scheduledStart, scheduledEnd)
   const missed = 420 - worked
   const nightMinutes = overlap(start, end, 22 * 60, scheduledEnd)

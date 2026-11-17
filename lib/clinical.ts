@@ -39,6 +39,7 @@ export type EncounterLike = {
   regimen: string
   remark: string
   animalStatus?: string
+  day14Workflow?: string
   biteDate?: string
   seriesStartDate?: string | null
   continuedFromEncounterId?: string | null
@@ -80,6 +81,7 @@ export function protocolOf(e: EncounterLike, allDoses: DoseLike[] = []) {
   if (e.preExp) return { ...PROTOCOLS.PREEXP, route, label: `Pre-exposure (${route})` }
   if (e.booster) return { ...PROTOCOLS.BOOSTER, route, label: `Booster (${route})` }
   if (e.regimen === 'IM') return PROTOCOLS.IM
+  if (e.day14Workflow === 'optional') return { label: 'Intradermal (ID)', route: 'ID', days: linkedDoses(e, allDoses).some(d => d.day === 'D14') ? ID_DAYS_D14 : ID_DAYS }
   return { label: 'Intradermal (ID)', route: 'ID', days: day14Required(e, allDoses) ? ID_DAYS_D14 : ID_DAYS }
 }
 
@@ -174,7 +176,7 @@ export function samePerson(a: { last: string; first: string; middle?: string; bi
 
 export const isAccredited = (accreditation: string) => accreditation === 'Accredited'
 export const isPhilhealthBill = (c: string) => c === 'PhilHealth' || c === 'For PhilHealth'
-export const visitNeedsPay = (enc: { billing: string, booster?: boolean, category?: string }) => !!enc.booster || (enc.billing === 'Walk-in' && enc.category !== 'I')
+export const visitNeedsPay = (enc: { billing: string, booster?: boolean, preExp?: boolean, category?: string }) => !!enc.booster || !!enc.preExp || (enc.billing === 'Walk-in' && enc.category !== 'I')
 export const visitPaid = (pays: { encounterId: string; status: string; amount: number }[], eid: string) =>
   pays.some(p => p.encounterId === eid && p.status === 'Paid' && Number(p.amount) > 0)
 

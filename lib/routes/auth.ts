@@ -60,6 +60,7 @@ authRouter.post('/logout', requireAuth, async (req, res) => {
 })
 
 authRouter.get('/me', async (req, res) => {
+  if (process.env.TEMPORARY_BRANCH_ENABLED === 'true') return res.json({ user: req.user || null })
   const token = req.cookies?.[COOKIE]
   if (!token) return res.json({ user: null })
   const session = await prisma.session.findUnique({

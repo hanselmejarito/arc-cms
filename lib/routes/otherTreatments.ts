@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
 import type { Prisma, InventoryLine, Movement } from '@prisma/client'
 import { ApiRouter } from '../router.js'
+import { temporaryPatientAllowed } from '../temporaryPatientAccess.js'
 import { requireAuth, requirePage, canAccessBranch } from '../auth.js'
 import { prisma } from '../prisma.js'
 import { BRANCH_CODES, canPage, clinicDate } from '../clinical.js'
@@ -75,6 +76,7 @@ otherTreatmentsRouter.post('/other-treatments', requirePage('treatments'), async
   if (!canAccessBranch(user, branch)) return res.status(403).json({ error: 'This is not your branch.' })
   const [patient, branchRow] = await Promise.all([prisma.patient.findUnique({ where: { id: patientId }, select: { id: true } }), prisma.branch.findUnique({ where: { name: branch }, select: { name: true } })])
   if (!patient || !branchRow || !BRANCH_CODES[branch]) return res.status(400).json({ error: 'Select a valid patient and branch.' })
+  if (user.strictBranchScope && !await temporaryPatientAllowed(user, patientId)) return res.status(403).json({ error: 'This patient is not available at your duty branch.' })
   const date = clinicDate(), year = Number(date.slice(0, 4))
   const result = await prisma.$transaction(async tx => {
     const counter = await tx.otherTreatmentCounter.upsert({ where: { branch_year: { branch, year } }, create: { branch, year, lastSeq: 1 }, update: { lastSeq: { increment: 1 } } })
@@ -101,6 +103,7 @@ otherTreatmentsRouter.post('/other-treatment-visits', requirePage('treatments'),
   if (items.some(x => x.service !== 'ERIG' && x.stockQuantity !== 1)) return res.status(400).json({ error: 'Each non-ERIG service uses one vial per patient.' })
   const [patient, branchRow] = await Promise.all([prisma.patient.findUnique({ where: { id: patientId }, select: { id: true } }), prisma.branch.findUnique({ where: { name: branch }, select: { name: true } })])
   if (!patient || !branchRow || !BRANCH_CODES[branch]) return res.status(400).json({ error: 'Select a valid patient and branch.' })
+  if (user.strictBranchScope && !await temporaryPatientAllowed(user, patientId)) return res.status(403).json({ error: 'This patient is not available at your duty branch.' })
   const date = clinicDate(), year = Number(date.slice(0, 4))
   try {
     const result = await prisma.$transaction(async tx => {

@@ -1,7 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto'
 import argon2 from 'argon2'
 import { prisma } from './prisma.js'
-import { ALL_BRANCH_ROLES, canPage } from './clinical.js'
+import { ALL_BRANCH_ROLES, canPage, clinicDate } from './clinical.js'
+import { dutyAccessBranch } from './dutyAccess.js'
 import type { Guard } from './router.js'
 
 export const COOKIE = 'arc_session'
@@ -15,6 +16,10 @@ export type AuthedUser = {
   branchName: string | null
   employeeId: string | null
   allBranches: boolean
+  homeBranchName?: string | null
+  temporaryDuty?: boolean
+  temporaryBranchEnabled?: boolean
+  strictBranchScope?: boolean
 }
 
 export const hashToken = (token: string) => createHash('sha256').update(token).digest('hex')
@@ -40,7 +45,8 @@ export function toUser(row: { id: string; name: string; email: string; role: str
     role: row.role,
     branchName: row.branchName,
     employeeId: row.employeeId,
-    allBranches: ALL_BRANCH_ROLES.includes(row.role)
+    allBranches: ALL_BRANCH_ROLES.includes(row.role),
+    ...(process.env.TEMPORARY_BRANCH_ENABLED === 'true' ? { temporaryBranchEnabled: true, homeBranchName: row.branchName, strictBranchScope: !ALL_BRANCH_ROLES.includes(row.role) } : {})
   }
 }
 
@@ -51,7 +57,19 @@ export async function loadSession(token?: string) {
     include: { user: true }
   })
   if (!session || session.expiresAt < new Date() || session.user.status !== 'Active') return null
-  return { id: session.id, user: toUser(session.user) }
+  const user = toUser(session.user)
+  // Kept off until branch selection, payroll attribution, and browser data
+  // invalidation are completed and verified together.
+  if (process.env.TEMPORARY_BRANCH_ENABLED === 'true' && !user.allBranches && user.employeeId) {
+    const open = await prisma.attendance.findMany({ where: { userId: user.id, OR: [{ clockIn: { not: '' }, clockOut: '' }, { nightClockIn: { not: '' }, nightClockOut: '' }] }, orderBy: { date: 'desc' }, take: 2 })
+    const stale = open.length > 1 || open.some(row => row.date !== clinicDate())
+    const attendance = open[0] || null
+    const branch = stale ? null : dutyAccessBranch(user.branchName, attendance)
+    user.homeBranchName = user.branchName
+    user.temporaryDuty = !!attendance && branch !== user.branchName
+    user.branchName = branch
+  }
+  return { id: session.id, user }
 }
 
 const mark = (guard: Guard) => Object.assign(() => {}, { _guard: guard })
