@@ -70,7 +70,7 @@ function DoseBlock({row,g}){
    <span className="arc-dose-label">Date/Time</span>
    <b className="arc-dose-date">{g?slash(g.date).replaceAll(' ',''):'__/__/26'}</b>
    <small className="arc-dose-time">{g?.time||'__:__'}</small>
-   <span className="arc-dose-label arc-vaccinator-label">Vaccinator</span>
+   <span className="arc-dose-label arc-vaccinator-label">{g&&!g.signature?'Vaccinator · signature pending':'Vaccinator'}</span>
    <span className="arc-vaccinator-signed">{g?.signature&&<ClearPrintSignature src={g.signature} className="arc-vaccinator-signature" alt="Vaccinator signature" strengthen/>}<em className="arc-vaccinator-name">{g?.vaccinator||'__________'}</em></span>
   </div>
   <div className="arc-dose-body">
@@ -387,7 +387,7 @@ export function RerSheet({e,p,doses}){
        <span>{e.doctor||''}</span>
       </div>
       <div className="arc-sign-rule" aria-hidden="true"/>
-      <p className="arc-sign-label">Doctor’s Signature</p>
+      <p className="arc-sign-label">{e.doctor&&!e.doctorSignature?'Doctor’s Signature · Pending':'Doctor’s Signature'}</p>
      </div>
     </div>
    </div>

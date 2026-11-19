@@ -79,7 +79,7 @@ export async function createDoseInTx(tx: Tx, enc: Encounter, input: DoseInput, b
       branch: servicing
     }
   })
-  await tx.encounter.update({ where: { id: enc.id }, data: { animalStatus: input.animalStatus } })
+  if (input.animalStatus) await tx.encounter.update({ where: { id: enc.id }, data: { animalStatus: input.animalStatus } })
   const movement = await tx.movement.create({
     data: {
       id: await nextId(tx.movement, 'MOV-', 4),

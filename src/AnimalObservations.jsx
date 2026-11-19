@@ -3,7 +3,7 @@ import { api } from './api'
 import { Button, Card, Field, Modal, Table } from './components'
 import { clinicDate, fmt } from './data'
 
-export default function AnimalObservations({ encounter, status, onReviewed, notify }) {
+export default function AnimalObservations({ encounter, status, onReviewed, notify, reviewOnly = false }) {
   const [rows, setRows] = React.useState([])
   const [error, setError] = React.useState('')
   const [modal, setModal] = React.useState('')
@@ -33,11 +33,12 @@ export default function AnimalObservations({ encounter, status, onReviewed, noti
       setModal('')
     } catch (e) { setError(e.message) } finally { setBusy(false) }
   }
-  return <Card title="Biting animal status">
-    <p className="card-note">Record new reports separately. The clinician decides whether Day 14 is needed; updating this history does not record a vaccine dose.</p>
-    <div className="row-actions"><Button variant="secondary" onClick={() => { setForm({ status: '', observedDate: '', reportedDate: clinicDate(), remarks: '', clinician: '', reason: '' }); setError(''); setModal('observation') }}>Record status report</Button>{reviewAvailable && <Button variant="secondary" onClick={() => { setError(''); setModal('review') }}>Record clinical review</Button>}</div>
+  if (reviewOnly && !reviewAvailable) return null
+  return <Card title={reviewOnly ? 'Day 14 workflow review' : 'Biting animal status'}>
+    <p className="card-note">{reviewOnly ? 'A clinician must review this existing case before enabling the optional Day 14 workflow.' : 'Record new reports separately. The clinician decides whether Day 14 is needed; updating this history does not record a vaccine dose.'}</p>
+    <div className="row-actions">{!reviewOnly&&<Button variant="secondary" onClick={() => { setForm({ status: '', observedDate: '', reportedDate: clinicDate(), remarks: '', clinician: '', reason: '' }); setError(''); setModal('observation') }}>Record status report</Button>}{reviewAvailable && <Button variant="secondary" onClick={() => { setError(''); setModal('review') }}>Record clinical review</Button>}</div>
     {error && !modal && <p role="alert">{error}</p>}
-    <Table pageSize={5} columns={[{label:'STATUS',key:'status'},{label:'OBSERVED',render:r=>r.observedDate?fmt(r.observedDate):'Unknown'},{label:'REPORTED',render:r=>fmt(r.reportedDate)},{label:'RECORDED BY',key:'recordedBy'},{label:'REMARKS',render:r=>r.remarks||'—'}]} rows={rows} empty="No separate status reports recorded."/>
+    {!reviewOnly&&<Table pageSize={5} columns={[{label:'STATUS',key:'status'},{label:'OBSERVED',render:r=>r.observedDate?fmt(r.observedDate):'Unknown'},{label:'REPORTED',render:r=>fmt(r.reportedDate)},{label:'RECORDED BY',key:'recordedBy'},{label:'REMARKS',render:r=>r.remarks||'—'}]} rows={rows} empty="No separate status reports recorded."/>}
     {modal && <Modal title={modal === 'review' ? 'Clinical review for Day 14' : 'Record animal status report'} onClose={() => !busy && setModal('')} footer={<><Button variant="secondary" disabled={busy} onClick={() => setModal('')}>Cancel</Button><Button disabled={busy} onClick={save}>Save</Button></>}>
       {modal === 'review' ? <><p className="card-note">Record the clinician's review before enabling the optional Day 14 workflow for this ongoing case.</p><Field label="Reviewing clinician" value={form.clinician} onChange={e=>setForm({...form,clinician:e.target.value})}/><Field label="Reason" type="textarea" value={form.reason} onChange={e=>setForm({...form,reason:e.target.value})}/></> : <><Field label="Animal status" value={form.status} options={['Alive','Lost/Stray','Dead']} onChange={e=>setForm({...form,status:e.target.value})}/><Field label="Date observed (optional)" type="date" value={form.observedDate} onChange={e=>setForm({...form,observedDate:e.target.value})}/><Field label="Date reported" type="date" value={form.reportedDate} onChange={e=>setForm({...form,reportedDate:e.target.value})}/><Field label="Remarks" type="textarea" value={form.remarks} onChange={e=>setForm({...form,remarks:e.target.value})}/></>}
       {error && <p role="alert">{error}</p>}

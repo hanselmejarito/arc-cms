@@ -486,7 +486,7 @@ async function main() {
           await tx.encounter.create({data:{id,registry:id+'-registry',patientId:tag,branch:'Guimba',date:today,biteDate:today,rer:true,billing:'PhilHealth',category:'III',pepEligible:true,regimen:'ID',day14Workflow:'optional',vaccine:'PVRV',brand:'Bioshoot',wound:{},history:{},tt:{},erig:{},progress:{}}})
           for(const day of ['D0','D3','D7']) await tx.dose.create({data:{id:id+'-'+day,encounterId:id,day,date:today,dose:'0.1 mL × 2 sites ID',animalStatus:'Alive',vaccinator:'Synthetic Staff',branch:'Guimba'}})
           const day=suffix==='optional-d14'?'D14':'D28'
-          const first=await phCall('/encounters/:id/doses',doseBody(day),id)
+          const first=await phCall('/encounters/:id/doses',{...doseBody(day),animalStatus:''},id)
           assert.equal(first.statusCode,200);assert.equal(first.body.followUpPayment.status,'Pending')
           assert.equal((await phCall('/encounters/:id/followup-payment',{day,priceCentavos:75000},id)).statusCode,200)
           assert.equal((await phCall('/encounters/:id/doses',doseBody(day),id)).statusCode,409)

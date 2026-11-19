@@ -928,7 +928,7 @@ clinicalRouter.post('/encounters/:id/doses', requirePage('treatments'), async (r
   const enc = await prisma.encounter.findUnique({ where: { id: req.params.id } })
   if (!enc) return res.status(404).json({ error: 'Admission not found' })
   if (!inScopeEncounter(req.user!, enc)) return res.status(403).json({ error: 'This is not your branch' })
-  if (!enc.preExp && !parsed.data.animalStatus) return res.status(400).json({ error: 'Select the biting animal status.' })
+  if (!enc.preExp && !enc.booster && enc.regimen !== 'IM' && enc.day14Workflow !== 'optional' && !parsed.data.animalStatus) return res.status(400).json({ error: 'Clinical review is required before recording this dose without an animal status.' })
   const servicing = servicingBranch(enc)
   const nurse = await resolveVaccinator(prisma, servicing, parsed.data.vaccinator)
   if (!nurse || nurse.name !== parsed.data.vaccinator) {
@@ -1016,7 +1016,7 @@ clinicalRouter.patch('/encounters/:id/doses/:day', requirePage('treatments'), as
   const enc = await prisma.encounter.findUnique({ where: { id: req.params.id } })
   if (!enc) return res.status(404).json({ error: 'Admission not found' })
   if (!inScopeEncounter(req.user!, enc)) return res.status(403).json({ error: 'This is not your branch' })
-  if (!enc.preExp && !parsed.data.animalStatus) return res.status(400).json({ error: 'Select the biting animal status.' })
+  if (!enc.preExp && !enc.booster && enc.regimen !== 'IM' && enc.day14Workflow !== 'optional' && !parsed.data.animalStatus) return res.status(400).json({ error: 'Clinical review is required before correcting this dose without an animal status.' })
   const servicing = servicingBranch(enc)
   const existing = await prisma.dose.findFirst({ where: { encounterId: enc.id, day: req.params.day } })
   if (!existing) return res.status(404).json({ error: 'Dose not found' })
@@ -1107,7 +1107,7 @@ clinicalRouter.patch('/encounters/:id/doses/:day', requirePage('treatments'), as
           batch: line && delta > 0 ? line.batch : existing.batch
         }
       })
-      await tx.encounter.update({ where: { id: enc.id }, data: { animalStatus: parsed.data.animalStatus } })
+      if (parsed.data.animalStatus) await tx.encounter.update({ where: { id: enc.id }, data: { animalStatus: parsed.data.animalStatus } })
       return { updated, line, movement }
     })
     await audit(req, { module: 'Treatment', action: 'Corrected ' + req.params.day + ' · ' + enc.registry, record: enc.registry, branch: servicing })
