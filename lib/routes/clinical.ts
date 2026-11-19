@@ -930,10 +930,8 @@ clinicalRouter.post('/encounters/:id/doses', requirePage('treatments'), async (r
   if (!inScopeEncounter(req.user!, enc)) return res.status(403).json({ error: 'This is not your branch' })
   if (!enc.preExp && !parsed.data.animalStatus) return res.status(400).json({ error: 'Select the biting animal status.' })
   const servicing = servicingBranch(enc)
-  const nurse = await prisma.employee.findFirst({
-    where: { name: parsed.data.vaccinator, branch: servicing, role: NURSE_ROLE, status: 'Active' }
-  })
-  if (!nurse) {
+  const nurse = await resolveVaccinator(prisma, servicing, parsed.data.vaccinator)
+  if (!nurse || nurse.name !== parsed.data.vaccinator) {
     return res.status(400).json({ error: 'Vaccinator must be an active Nurse at ' + servicing })
   }
   const doses = await prisma.dose.findMany({ where: { encounterId: { in: [enc.id, enc.continuedFromEncounterId || '', enc.receivingEncounterId || ''].filter(Boolean) } } })
@@ -964,6 +962,8 @@ clinicalRouter.post('/encounters/:id/doses', requirePage('treatments'), async (r
   }
   try {
     const result = await prisma.$transaction(async tx => {
+      const currentNurse = await resolveVaccinator(tx, servicing, parsed.data.vaccinator)
+      if (!currentNurse || currentNurse.name !== parsed.data.vaccinator) throw new Error('The selected vaccinator is no longer available at this branch.')
       const actualSignature=parsed.data.savedSignatureId?await resolveStaffSignature(tx,parsed.data.savedSignatureId,'Nurse',parsed.data.vaccinator,servicing,parsed.data.savedSignatureVersion||''):doseSignature
       if(parsed.data.savedSignatureId)await auditSavedSignatureUse(tx,req.user!,parsed.data.savedSignatureId,enc.registry+' · '+parsed.data.day,servicing,req.userAgent)
       const dose = await createDoseInTx(tx, enc, { ...parsed.data, ...(actualSignature ? { signature: actualSignature.image, signatureMethod: actualSignature.method as 'pen' | 'upload', recordedBy: req.user!.id } : {}) }, req.user!.name, doses)
@@ -1029,10 +1029,8 @@ clinicalRouter.patch('/encounters/:id/doses/:day', requirePage('treatments'), as
     catch { return res.status(400).json({ error: 'Choose a valid vaccinator signature.' }) }
   }
   if (existing.signature && existing.vaccinator !== parsed.data.vaccinator) return res.status(409).json({ error: 'The vaccinator cannot be changed while a signature is recorded.' })
-  const nurse = await prisma.employee.findFirst({
-    where: { name: parsed.data.vaccinator, branch: servicing, role: NURSE_ROLE, status: 'Active' }
-  })
-  if (!nurse) {
+  const nurse = await resolveVaccinator(prisma, servicing, parsed.data.vaccinator)
+  if (!nurse || nurse.name !== parsed.data.vaccinator) {
     return res.status(400).json({ error: 'Vaccinator must be an active Nurse at ' + servicing })
   }
   const oldUses = doseUses(existing.dose, enc.vaccine)
@@ -1040,6 +1038,8 @@ clinicalRouter.patch('/encounters/:id/doses/:day', requirePage('treatments'), as
   const delta = newUses - oldUses
   try {
     const result = await prisma.$transaction(async tx => {
+      const currentNurse = await resolveVaccinator(tx, servicing, parsed.data.vaccinator)
+      if (!currentNurse || currentNurse.name !== parsed.data.vaccinator) throw new Error('The selected vaccinator is no longer available at this branch.')
       if (parsed.data.savedSignatureId) newSignature=await resolveStaffSignature(tx,parsed.data.savedSignatureId,'Nurse',parsed.data.vaccinator,servicing,parsed.data.savedSignatureVersion||'')
       if (newSignature) {
         const claim = await tx.dose.updateMany({
@@ -1159,7 +1159,7 @@ async function autoDay0Extras(
       const servicing = servicingBranch(enc)
       const nurse = await resolveVaccinator(tx, servicing, day0.vaccinator || vaccinator, by)
       if (!nurse) throw new Error('No Nurse at ' + servicing + ' · add an employee first')
-      if ((day0.signature||day0.savedSignatureId) && nurse.name !== day0.vaccinator) throw new Error('No Nurse matching the selected vaccinator at ' + servicing)
+      if (nurse.name !== day0.vaccinator) throw new Error('No Nurse matching the selected vaccinator at ' + servicing)
       const signature = day0.savedSignatureId ? await resolveStaffSignature(tx,day0.savedSignatureId,'Nurse',nurse.name,servicing,day0.savedSignatureVersion||'') : day0.signature ? readSignature(day0.signature, day0.signatureMethod) : null
       if(day0.savedSignatureId){if(!recordedBy)throw new Error('The saved signature requires an identified user.');await auditSavedSignatureUse(tx,{id:recordedBy,name:by},day0.savedSignatureId,enc.registry+' · D0',servicing)}
       const result = await createDoseInTx(tx, enc, {

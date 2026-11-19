@@ -5,6 +5,8 @@ import { PrismaClient } from '@prisma/client'
 import { NextRequest } from 'next/server'
 import { dispatch } from '../lib/dispatch.js'
 import { clinicDate } from '../lib/clinical.js'
+import { resolveVaccinator } from '../lib/doses.js'
+import { resolveStaffSignature } from '../lib/staffSignatures.js'
 import { calc } from '../src/screens/People.jsx'
 import { branchPayrollSummary } from '../src/branchPayrollSummary.js'
 import { payPeriods, periodInputsFromAttendance } from '../src/data.js'
@@ -38,6 +40,9 @@ async function main(){
   r=await api('POST','/attendance/in',tokenN,{branch:'Paniqui'});check(r.status===200,'Morning Time In failed')
   r=await api('GET','/auth/me',tokenN);check(r.body.user.branchName==='Paniqui','Temporary branch not set')
   r=await api('GET','/staff-signatures',tokenN);check(r.body.some((x:{id:string,branch:string})=>x.id===tag+'-signature'&&x.branch==='Paniqui'),'Assigned nurse signature unavailable at duty branch')
+  check((await resolveVaccinator(db,'Paniqui','Synthetic Nurse'))?.id===employee,'Temporary vaccinator unavailable in duty branch')
+  const signer=await db.staffSignature.findUniqueOrThrow({where:{id:tag+'-signature'}})
+  await db.$transaction(async tx=>{const signature=await resolveStaffSignature(tx,signer.id,'Nurse','Synthetic Nurse','Paniqui',signer.updatedAt.toISOString());check(signature.image==='synthetic','Saved signature unavailable for temporary duty')})
   r=await api('GET','/clinical',tokenN);check(r.status===200,'Clinical load failed')
   check(r.body.patients.some((p:{id:string})=>p.id===ids.away),'Duty patient missing')
   check(!r.body.patients.some((p:{id:string})=>p.id===ids.home||p.id===ids.corrected),'Other branch patient leaked')
@@ -52,6 +57,8 @@ async function main(){
   r=await api('GET','/clinical',tokenN);check(r.body.patients.some((p:{id:string})=>p.id===ids.corrected),'Corrected branch patient missing');check(!r.body.patients.some((p:{id:string})=>p.id===ids.away),'Old branch patient remained available')
   r=await api('POST','/attendance/out',tokenN);check(r.status===200,'Morning Time Out failed')
   r=await api('GET','/auth/me',tokenN);check(r.body.user.branchName==='Guimba','Temporary access not revoked')
+  check((await resolveVaccinator(db,'Paniqui','Synthetic Nurse'))?.id!==employee,'Temporary vaccinator still available after Time Out')
+  check((await resolveVaccinator(db,'Guimba','Synthetic Nurse'))?.id===employee,'Home branch vaccinator not restored')
   r=await api('GET','/clinical',tokenN);check(r.body.patients.some((p:{id:string})=>p.id===ids.home),'Home branch patient missing after Time Out');check(!r.body.patients.some((p:{id:string})=>p.id===ids.away||p.id===ids.corrected),'Temporary branch patient remained visible after Time Out')
   r=await api('POST','/attendance/night/in',tokenN,{branch:'Guimba'});check(r.status===200,'Night Time In failed')
   r=await api('POST','/attendance/correct-branch',tokenA,{userId:nurse,date:clinicDate(),shift:'night',branch:'Cabanatuan',expectedBranch:'Guimba',reason:'Synthetic night correction'});check(r.status===200,'Night branch correction failed')
