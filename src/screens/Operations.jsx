@@ -1,4 +1,5 @@
 import React from 'react'
+import { comparePaymentHistory } from '../recordOrdering'
 import { ArrowDownLeft, ArrowRightLeft, ArrowUpRight, Check, CreditCard, FileText, GitBranch, Package, PiggyBank, Plus, RotateCcw, TriangleAlert, Wallet } from 'lucide-react'
 import { addDays, allBranchRoles, branches, caseInfo, dayLabel, defaultPeriod, financeCategories, fmt, groupBills, inPeriod, isPhilhealthBill, isReleasedRefund, isSale, itemMaster, money, periodLabel, refundRemaining, refundStamp, servicePrice, services, shiftWindows, today } from '../data'
 import { api, acceptReferralApi, closeShiftApi, createReferralApi, refundStatusApi, requestRefundApi, saveFinanceApi, savePaymentApi, stockAdjustApi, stockInApi, stockOutApi } from '../api'
@@ -65,7 +66,7 @@ export function InventoryReportPage({branch,received,inventory,ledger,notify,bra
  </>}
 
 export function PaymentsPage({branch,role,payments,setPayments,notify,patients,encounters,doses=[],setDoses,setInventory,setMovements,focus,refunds=[]}){
- const rows=groupBills(scope(payments,branch)),[q,setQ]=React.useState(''),[classification,setClassification]=React.useState(''),[period,setPeriod]=React.useState(defaultPeriod('Monthly')),[modal,setModal]=React.useState(false)
+ const rows=groupBills(scope(payments,branch)).sort(comparePaymentHistory),[q,setQ]=React.useState(''),[classification,setClassification]=React.useState(''),[period,setPeriod]=React.useState(defaultPeriod('Monthly')),[modal,setModal]=React.useState(false)
  const home=branch==='All branches'?'Guimba':branch
  const [form,setForm]=React.useState({encounterId:'',branch:home,date:today,method:'Cash',reference:'',classification:'Walk-in',remarks:'',lines:[{service:'Anti-rabies vaccine',qty:1}]})
  const [payMode,setPayMode]=React.useState('collect')

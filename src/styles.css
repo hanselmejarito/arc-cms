@@ -86,11 +86,22 @@ html.print-registry .app,html.print-registry .main-shell,html.print-registry .co
 html.print-registry .sidebar,html.print-registry .topbar,html.print-registry .app-footer,html.print-registry .toast,html.print-registry .section-title,html.print-registry .reports-filter,html.print-registry .export-actions{display:none!important}
 html.print-registry .registry-sheet,html.print-registry .form-sheet.registry-sheet{display:block!important;width:100%;border:0;box-shadow:none;padding:0;margin:0;background:#fff;color:#111;overflow:visible}
 html.print-registry .registry-sheet .table-scroll{overflow:visible!important;max-height:none!important}
-html.print-registry .registry-sheet .form-table.registry{width:100%;font-size:6.5pt;border-collapse:collapse}
-html.print-registry .registry-sheet .form-table.registry th,html.print-registry .registry-sheet .form-table.registry td{padding:2px 3px;border:1px solid #333;color:#111;background:#fff!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-html.print-registry .registry-sheet .form-table.registry th{font-size:6pt;font-weight:800}
+html.print-registry .registry-sheet .form-table.registry{width:100%;max-width:100%;table-layout:fixed;font-size:5.2pt;line-height:1.15;border-collapse:collapse}
+html.print-registry .registry-sheet .form-table.registry th,html.print-registry .registry-sheet .form-table.registry td{min-width:0!important;padding:1px;border:1px solid #333;color:#111;background:#fff!important;white-space:normal;overflow-wrap:anywhere;word-break:normal;vertical-align:top;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+html.print-registry .registry-sheet .form-table.registry th{font-size:5.1pt;font-weight:800}
+html.print-registry .registry-sheet .form-table.registry thead{display:table-header-group}
+html.print-registry .registry-sheet .form-table.registry tr{break-inside:avoid;page-break-inside:avoid}
+html.print-registry .registry-sheet .form-table.registry col:nth-child(1){width:7%}
+html.print-registry .registry-sheet .form-table.registry col:nth-child(3){width:8%}
+html.print-registry .registry-sheet .form-table.registry col:nth-child(5){width:8%}
+html.print-registry .registry-sheet .form-table.registry col:nth-child(9){width:7%}
+html.print-registry .registry-sheet .form-table.registry col:nth-child(12),html.print-registry .registry-sheet .form-table.registry col:nth-child(22){width:4%}
+html.print-registry .registry-sheet .form-table.registry col:nth-child(26){width:5%}
+html.print-registry .registry-sheet .form-table.registry col:nth-child(2),html.print-registry .registry-sheet .form-table.registry col:nth-child(4),html.print-registry .registry-sheet .form-table.registry col:nth-child(8),html.print-registry .registry-sheet .form-table.registry col:nth-child(10),html.print-registry .registry-sheet .form-table.registry col:nth-child(15),html.print-registry .registry-sheet .form-table.registry col:nth-child(n+17):nth-child(-n+21),html.print-registry .registry-sheet .form-table.registry col:nth-child(25){width:3%}
+html.print-registry .registry-sheet .form-table.registry col:nth-child(6),html.print-registry .registry-sheet .form-table.registry col:nth-child(7),html.print-registry .registry-sheet .form-table.registry col:nth-child(11),html.print-registry .registry-sheet .form-table.registry col:nth-child(13),html.print-registry .registry-sheet .form-table.registry col:nth-child(14),html.print-registry .registry-sheet .form-table.registry col:nth-child(16),html.print-registry .registry-sheet .form-table.registry col:nth-child(23),html.print-registry .registry-sheet .form-table.registry col:nth-child(24){width:2%}
 html.print-registry .registry-sheet .sheet-head{margin-bottom:4mm}
 html.print-registry .registry-sheet .sheet-head h3{font-size:12pt;margin:2mm 0}
+html.print-registry .registry-sheet .registry-logo{width:15mm;height:15mm;position:absolute;left:1mm;top:0}
 html.print-registry .registry-sheet .sheet-legend{font-size:7pt;color:#222;margin-top:3mm}
 html.print-registry .registry-sheet .sheet-legend p{margin:0 0 1mm}
 html.print-doh,html.print-doh body{height:auto!important;overflow:visible!important;background:#fff!important}
@@ -204,6 +215,28 @@ html.print-admission .soap-paper .arc-box{width:11px;height:11px}
 .arc-patient-photo img{width:100%;height:100%;object-fit:cover;display:block}
 .arc-form-logo{width:72px;height:72px;border-radius:50%;overflow:hidden;border:0;background:#ffcc00;flex:none;box-shadow:none}
 .arc-form-logo .brand-logo{width:100%;height:100%;object-fit:cover;display:block}
+.registry-head{position:relative;min-height:62px;justify-content:center;padding:0 80px}
+.registry-head .registry-logo{position:absolute;left:0;top:0;width:60px;height:60px}
+.doh-print-parts{display:none}
+@media print{
+ html.print-doh .doh-sheet{display:none!important}
+ html.print-doh .doh-print-parts{display:block;color:#111;background:#fff}
+ html.print-doh .doh-print-part{break-after:page;page-break-after:always}
+ html.print-doh .doh-print-part:last-child{break-after:auto;page-break-after:auto}
+ html.print-doh .doh-print-head{display:grid;grid-template-columns:20mm 1fr 20mm;align-items:center;text-align:center;margin:0 0 3mm}
+ html.print-doh .doh-print-head .arc-form-logo{width:16mm;height:16mm}
+ html.print-doh .doh-print-head strong{font-size:10pt}
+ html.print-doh .doh-print-head div{font-size:8pt}
+ html.print-doh .doh-print-head h3{font-size:11pt;margin:1mm 0}
+ html.print-doh .doh-print-note{font-size:7pt;margin:0 0 2mm}
+ html.print-doh .doh-part-table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:8pt}
+ html.print-doh .doh-part-table thead{display:table-header-group}
+ html.print-doh .doh-part-table tr{break-inside:avoid;page-break-inside:avoid}
+ html.print-doh .doh-part-table th,html.print-doh .doh-part-table td{border:1px solid #333;padding:2px;vertical-align:top;white-space:normal;overflow-wrap:anywhere;text-align:center;color:#111!important;letter-spacing:normal}
+ html.print-doh .doh-part-table th:first-child{width:15%;text-align:left}
+ html.print-doh .doh-part-table thead th{font-size:7pt}
+ html.print-doh .doh-part-table tfoot{font-weight:700}
+}
 .arc-form-title{min-width:0}
 .arc-form-head h1,.arc-form-head p{font-family:"Arial Black","Arial Bold",Arial,Helvetica,sans-serif;font-weight:900;text-align:center;text-transform:uppercase;color:#111;letter-spacing:.02em}
 .arc-form-head h1{margin:0;font-size:26px;line-height:1.05}

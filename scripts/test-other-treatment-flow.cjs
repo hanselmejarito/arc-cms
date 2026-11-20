@@ -217,6 +217,21 @@ async function main() {
         // Two separate shifts share a date without combining their clock stamps.
         const employeeId=tag+'-employee'
         await tx.employee.create({data:{id:employeeId,name:'Synthetic Staff',branch:'Guimba',position:'Nurse',role:'Nurse',rate:850}})
+        const classificationId=tag+'-classification', classificationUser=tag+'-classification-user'
+        await tx.employee.create({data:{id:classificationId,name:'Synthetic Classification',branch:'Guimba',position:'Nurse',role:'Nurse',rate:850,payroll:true,benefits:true}})
+        await tx.user.create({data:{id:classificationUser,name:'Synthetic Classification',email:tag+'-classification@example.invalid',passwordHash:'synthetic',role:'Nurse',branchName:'Guimba',employeeId:classificationId}})
+        const classificationForm={name:'Synthetic Classification',email:tag+'-classification@example.invalid',branch:'Guimba',position:'Nurse',role:'Nurse',rate:850,shift:'Morning Shift',status:'Active',payroll:true,benefits:true,officer:false,employmentClassification:'Regular',workArrangement:'Part-time'}
+        assert.equal((await call(ops,'PATCH','/employees/:id',{id:classificationId},classificationForm,{...user,role:'Nurse'})).statusCode,403)
+        assert.equal((await call(ops,'PATCH','/employees/:id',{id:classificationId},{...classificationForm,workArrangement:'Invalid'})).statusCode,400)
+        assert.equal((await call(ops,'PATCH','/employees/:id',{id:classificationId},classificationForm)).statusCode,200)
+        let classified=await tx.employee.findUniqueOrThrow({where:{id:classificationId}})
+        assert.equal(classified.employmentClassification,'Regular');assert.equal(classified.workArrangement,'Part-time')
+        assert.equal(classified.payroll,true);assert.equal(classified.benefits,true);assert.equal(classified.rate,850)
+        const {employmentClassification,workArrangement,...legacyForm}=classificationForm
+        assert.equal((await call(ops,'PATCH','/employees/:id',{id:classificationId},legacyForm)).statusCode,200)
+        classified=await tx.employee.findUniqueOrThrow({where:{id:classificationId}})
+        assert.equal(classified.employmentClassification,'Regular');assert.equal(classified.workArrangement,'Part-time')
+        console.log('Optional employee classification, authorization and payroll independence: PASS')
         const imageBytes=Buffer.alloc(33);Buffer.from([137,80,78,71,13,10,26,10]).copy(imageBytes);imageBytes.write('IHDR',12);imageBytes.writeUInt32BE(1,16);imageBytes.writeUInt32BE(1,20)
         const savedImage='data:image/png;base64,'+imageBytes.toString('base64');imageBytes[32]=2;const newerImage='data:image/png;base64,'+imageBytes.toString('base64')
         const signaturePayload={kind:'Nurse',employeeId,image:savedImage,method:'upload'}

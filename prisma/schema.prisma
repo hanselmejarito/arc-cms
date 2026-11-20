@@ -408,6 +408,8 @@ model Employee {
   branch  String
   position String
   role    String
+  employmentClassification String @default("")
+  workArrangement String @default("")
   rate    Float
   hours   Int     @default(8)
   shift   String  @default("Morning Shift")

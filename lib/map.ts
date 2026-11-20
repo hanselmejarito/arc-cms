@@ -314,6 +314,8 @@ export function employeeClient(x: Employee & { users?: Pick<User, 'email'>[], pa
     branch: x.branch,
     position: x.position,
     role: x.role,
+    employmentClassification: x.employmentClassification,
+    workArrangement: x.workArrangement,
     rate: x.rate,
     hours: x.hours,
     shift: x.shift,
