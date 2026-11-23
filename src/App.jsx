@@ -74,6 +74,7 @@ export default function App(){
  const focus=route.focus
  const [ready,setReady]=React.useState(false)
  const [logged,setLogged]=React.useState(false)
+ const [loginTransition,setLoginTransition]=React.useState(false)
  const [user,setUser]=React.useState(null)
  const [theme,setTheme]=useStored('clinic-theme','light')
  React.useEffect(()=>{document.documentElement.dataset.theme=theme},[theme])
@@ -148,6 +149,7 @@ export default function App(){
  React.useEffect(()=>{if(toast){const t=setTimeout(()=>setToast(null),4000);return()=>clearTimeout(t)}},[toast])
  React.useEffect(()=>{if(!logged||!user)return;const need=page==='profile'?'patients':page;if(page==='dashboard')return;if(!can(user.role,need))router.replace('/')},[logged,user,page,router])
  React.useEffect(()=>{if(logged&&route.page==='login')router.replace('/')},[logged,route.page,router])
+ React.useEffect(()=>{if(loginTransition&&logged&&pathname==='/')setLoginTransition(false)},[loginTransition,logged,pathname])
  const notify=(message,type='Update')=>{const fail=type==='error'||type==='Error'||(type==='Update'&&/required|Enter |Select |Mali|Hindi|failed|Unable|blocked|already|must /i.test(message));setToast({message,fail});if(!fail)setActivity(a=>[{title:message,patient:(user?.name||'')+' ('+role+')',branch:branch==='All branches'?'Guimba':branch,time:new Date().toLocaleTimeString('en-PH',{hour:'numeric',minute:'2-digit'}),type},...(a||[])].slice(0,30))}
  const go=(id,nextFocus=null)=>{const need=id==='profile'?'patients':id;if(id!=='dashboard'&&!can(role,need))return;const pid=id==='profile'?(nextFocus&&typeof nextFocus==='object'&&nextFocus.patientId)||patientRef.current||patientId:'';router.push(hrefFor(id,pid,id==='profile'?null:nextFocus));setMobile(false);setProfileMenu(false);window.scrollTo({top:0,behavior:'smooth'})}
  const branchLocked=!allBranchRoles.includes(role)
@@ -172,7 +174,7 @@ export default function App(){
  const promptKey=dutyPromptDismissalKey(user?.id,clinicDate(),promptOptions)
  let promptStorage=null
  try{if(typeof window!=='undefined')promptStorage=window.sessionStorage}catch{}
- const login=async(email,password,remember)=>{const loggedIn=(await loginApi(email,password,remember)).user;await startSession(loggedIn.temporaryBranchEnabled?(await meApi()).user:loggedIn);setPromptHidden('');router.replace('/')}
+ const login=async(email,password,remember)=>{setLoginTransition(true);try{const loggedIn=(await loginApi(email,password,remember)).user;await startSession(loggedIn.temporaryBranchEnabled?(await meApi()).user:loggedIn);setPromptHidden('');router.replace('/')}catch(err){setLoginTransition(false);throw err}}
  const pickDuty=(kind)=>{if(user?.strictBranchScope&&!user?.branchName){notify('An earlier or conflicting duty needs Admin review before Time In.','error');return}const home=user?.homeBranchName||employees.find(e=>e.id===user?.employeeId)?.branch||user?.branchName||'Guimba';const eligible=branchMaster.filter(b=>branchShiftAvailable(b,kind,today));setDutySelection({kind,branch:eligible.some(b=>b.name===home)?home:(eligible[0]?.name||'')})}
  const timeIn=async(choice)=>{if(record?.in)return;if(user?.temporaryBranchEnabled&&typeof choice!=='string'){pickDuty('morning');return}const duty=employees.find(e=>e.id===user?.employeeId)?.branch;const where=typeof choice==='string'?choice:(branch==='All branches'?(duty||homeBranch[role]||'Guimba'):branch);try{const saved=await timeInApi({branch:where});setAttendance(log=>[...log.filter(x=>!(x.date===today&&(!x.userId||x.userId===user?.id))),saved]);setDutySelection(null);if(user?.temporaryBranchEnabled){refreshDuty();return}notify('Time In recorded at '+formatTime12(saved.in)+' · '+saved.branch,'Attendance')}catch(err){notify(err.message,'error')}}
  const timeOut=async(refresh=true)=>{if(!record?.in||record.out)return;try{const saved=await timeOutApi();setAttendance(log=>log.map(x=>x.date===today&&(!x.userId||x.userId===user?.id)?saved:x));if(user?.temporaryBranchEnabled&&refresh!==false){refreshDuty();return}notify('Time Out recorded at '+formatTime12(saved.out),'Attendance')}catch(err){notify(err.message,'error')}}
@@ -185,7 +187,7 @@ export default function App(){
  const inScope=b=>branch==='All branches'||b===branch
  const alertCount=inventory.filter(x=>inScope(x.branch)&&(x.stock<=x.threshold||x.expiry<addDays(today,60))).length
  const ctx={page,go,focus,branch,role,temporaryBranchEnabled:!!user?.temporaryBranchEnabled,userId:user?.id||'',userName:user?.name||'',employeeId:user?.employeeId||'',patients,setPatients,encounters,setEncounters,doses,setDoses,schedule,inventory,setInventory,ledger,setLedger,received,setReceived,movements,setMovements,payments,setPayments,finance,setFinance,referrals,setReferrals,refunds,setRefunds,attendance,setAttendance,payrollInputs,setPayrollInputs,contributionOverrides,setContributionOverrides,attendanceCorrections,setAttendanceCorrections,overtimeRequests,setOvertimeRequests,employees,setEmployees,users,setUsers,branchMaster,setBranchMaster,timeIn,timeOut,nightTimeIn,nightTimeOut,notes,setNotes,activity,notify,patientId,setPatientId,encounterId,setEncounterId,can:p=>can(role,p)}
- if(!ready)return <div className="login-page"><div className="login-right"><p className="card-note">Loading…</p></div></div>
+ if(!ready||(logged&&loginTransition))return <div className="login-page"><div className="login-right"><p className="card-note">{loginTransition?'Signing in…':'Loading…'}</p></div></div>
  if(!logged)return <Login onLogin={login} theme={theme} setTheme={setTheme}/>
  const pages={dashboard:Dashboard,patients:PatientsPage,profile:ProfilePage,admissions:AdmissionsPage,exposure:ExposurePage,treatments:TreatmentsPage,'other-treatments':OtherTreatmentsPage,notes:NotesPage,schedule:SchedulePage,stock:InventoryPage,receiving:InventoryPage,usage:InventoryPage,adjustments:InventoryPage,alerts:InventoryPage,invreport:InventoryReportPage,payments:PaymentsPage,finance:FinancePage,referrals:ReferralsPage,refunds:RefundsPage,employees:EmployeesPage,attendance:AttendancePage,payroll:PayrollPage,payslips:PayslipsPage,reports:ReportsPage,registry:RegistryPage,doh:DOHPage,branches:BranchesPage,users:UsersPage,audit:AuditPage,settings:SettingsPage}
  const Page=pages[page]||Dashboard
