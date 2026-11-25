@@ -735,7 +735,7 @@ const employeeSchema = z.object({
   name: z.string().trim().min(1),
   referenceNumber: z.string().trim().max(100).optional(),
   email: z.string().trim().min(1),
-  password: z.string().min(8),
+  password: z.string().min(8, 'Password must contain at least 8 characters.'),
   branch: z.string().min(1),
   position: z.string().trim().min(1).optional().default('Clinic Staff'),
   role: z.enum(STAFF_ROLES),
@@ -793,7 +793,7 @@ opsRouter.post('/employees', requirePage('employees'), async (req, res) => {
 const userSchema = z.object({
   name: z.string().trim().min(1),
   email: z.string().trim().min(1),
-  password: z.string().min(8),
+  password: z.string().min(8, 'Password must contain at least 8 characters.'),
   role: z.enum(ROLES),
   branch: z.string().optional().default('Guimba'),
   employee: z.string().trim().optional().default('')
@@ -851,7 +851,7 @@ async function lastActiveSuperadmin(exceptId?: string) {
 }
 
 const employeePatchSchema = employeeSchema.extend({
-  password: z.string().min(8).optional().or(z.literal(''))
+  password: z.string().min(8, 'Password must contain at least 8 characters.').optional().or(z.literal(''))
 })
 
 opsRouter.patch('/employees/:id', requirePage('employees'), async (req, res) => {
@@ -984,7 +984,7 @@ opsRouter.patch('/employees/:id', requirePage('employees'), async (req, res) => 
 })
 
 const userPatchSchema = userSchema.extend({
-  password: z.string().min(8).optional().or(z.literal('')),
+  password: z.string().min(8, 'Password must contain at least 8 characters.').optional().or(z.literal('')),
   status: z.enum(['Active', 'Inactive']).optional().default('Active')
 })
 

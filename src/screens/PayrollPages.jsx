@@ -1,11 +1,11 @@
 import React from 'react'
 import { payrollEligibleForPeriod } from '../payrollEligibility'
-import { Clock3, Printer, ShieldCheck } from 'lucide-react'
+import { Clock3, Download, Printer, ShieldCheck } from 'lucide-react'
 import { branchMaster as seedBranches, fmt, money, overrideFor, payPeriods, periodInputsFromAttendance } from '../data'
 import { decideOvertimeApi, resetPayrollInputApi, saveContributionOverrideApi, savePayrollInputApi } from '../api'
 import { Badge, BrandLogo, Button, Card, Field, Modal, SectionTitle, Select, Table, Tabs } from '../components'
 import { calc } from './People'
-import { PayrollPrint, printHrDocument } from './HrPrint'
+import { PayrollPrint, downloadHrDocument, printHrDocument } from './HrPrint'
 import { branchPayrollRows } from '../branchPayroll'
 import { branchPayrollSummary } from '../branchPayrollSummary'
 import { attendanceForBranch, hasPayrollAdjustment } from '../dutyAllocation'
@@ -150,7 +150,7 @@ export function PayrollPage({
   return (
     <>
       <div id="payroll-print-source" className="hr-print-source"><PayrollPrint rows={printedRegister} period={{...P,id:period}}/></div>
-      <SectionTitle eyebrow="PEOPLE OPERATIONS" title="Payroll" description="Auto from Time In / Time Out. Admin can update a cutoff with a reason." action={<><Select value={period} onChange={setPeriod} options={payPeriods.map(p => [p.id, p.label])} /><Button variant="secondary" icon={Printer} disabled={allocationIssues.length>0 || (temporaryBranchEnabled && Object.keys(inputs).length>0) || register.some(r=>r.i.auto.needsReview?.length)} onClick={() => printHrDocument('payroll-print-source')}>Print payroll register</Button></>} />
+      <SectionTitle eyebrow="PEOPLE OPERATIONS" title="Payroll" description="Auto from Time In / Time Out. Admin can update a cutoff with a reason." action={<><Select value={period} onChange={setPeriod} options={payPeriods.map(p => [p.id, p.label])} /><Button variant="secondary" icon={Download} disabled={allocationIssues.length>0 || (temporaryBranchEnabled && Object.keys(inputs).length>0) || register.some(r=>r.i.auto.needsReview?.length)} onClick={() => {if(!downloadHrDocument('payroll-print-source','Payroll-Register.xlsx','Payroll Register',P.label))notify('No payroll register available to download','error')}}>Download Excel</Button><Button variant="secondary" icon={Printer} disabled={allocationIssues.length>0 || (temporaryBranchEnabled && Object.keys(inputs).length>0) || register.some(r=>r.i.auto.needsReview?.length)} onClick={() => printHrDocument('payroll-print-source')}>Print payroll register</Button></>} />
       {allocationIssues.length>0&&<div className="notice-line" role="alert">Branch payroll requires Admin review for {allocationIssues.map(x=>x.employee.name).join(', ')}. Totals and printing are unavailable until reconciled.</div>}
       {register.some(r=>r.i.auto.needsReview?.length)&&<div className="notice-line" role="alert">Some attendance records need Admin review (missing time, break, or night overtime). Review Attendance before using or printing these payroll figures.</div>}
       <div className="notice-line"><ShieldCheck size={18} /><span>Duty days come from Time In / Time Out. Enrolled staff: 15th payslip deducts Pag-IBIG ₱200 and PhilHealth ₱337.50, 30th payslip deducts SSS ₱675. Employees whose membership is still being processed stay at ₱0. Employer share is remitted by the clinic, not deducted.</span></div>
@@ -304,7 +304,7 @@ export function PayslipsPage({
       {!payslipNeedsReview&&<div className="payslip-sheet">
         <div className="payslip-brand"><div className="brand-mark"><BrandLogo /></div><div><strong>ARC</strong><span>EMPLOYEE PAYSLIP</span></div><small>{fmt(P.pay)}</small></div>
         <div className="payslip-info">
-          <div><small>EMPLOYEE</small><strong>{employee.name}</strong><span>{employee.referenceNumber?.trim() ? 'Employee ID: ' + employee.referenceNumber.trim() : 'Employee ID not set'} · {employee.position}</span></div>
+          <div><small>EMPLOYEE</small><strong>{employee.name}</strong><span>{[employee.referenceNumber?.trim() && 'Employee ID: ' + employee.referenceNumber.trim(), employee.position].filter(Boolean).join(' · ')}</span></div>
           <div><small>BRANCH</small><strong>{employee.branch}</strong><span>{employee.shift}</span></div>
           <div><small>PAY PERIOD</small><strong>{P.label}</strong><span>{c.days} base / {c.nightShiftDays} additional night shifts</span></div>
           <div><small>DAILY RATE</small><strong>{money(employee.rate)}</strong><span>No work, no pay</span></div>

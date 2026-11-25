@@ -19,12 +19,13 @@ import {
 import { issueRegistry, issueTxn, nextPrefixedId, peekRegistry } from '../registry.js'
 import { addsOtherOnlyServices, boosterServiceForBrand, isBoosterVaccineLine } from '../billingPolicy.js'
 import { treatmentChanged, treatmentRecorded, treatmentSnapshot, type TreatmentKind } from '../treatmentRecordLock.js'
+import { validDoseSide, validDoseSideCorrection } from '../../src/doseSide.js'
 import { ensureFollowupCharge } from '../followupCharge.js'
 import { workspaceExtras } from './ops.js'
 import { readPhoto } from '../photoInput.js'
 import { readSignature } from '../signatureInput.js'
 import { otherPaymentClient, otherPendingClients } from '../otherTreatment.js'
-import { PHILHEALTH_CATEGORY_III_PACKAGE, isPhilhealthCashFollowUp } from '../philhealthPackage.js'
+import { PHILHEALTH_CATEGORY_III_PACKAGE } from '../philhealthPackage.js'
 import { auditSavedSignatureUse, resolveStaffSignature } from '../staffSignatures.js'
 import { temporaryPatientAllowed } from '../temporaryPatientAccess.js'
 
@@ -570,8 +571,9 @@ clinicalRouter.patch('/encounters/:id', requirePage('exposure'), async (req, res
   if (!existing) return res.status(404).json({ error: 'Admission not found' })
   if (!inScopeEncounter(req.user!, existing)) return res.status(403).json({ error: 'This is not your branch' })
   const body = req.body as Record<string, unknown>
-  const day0Input = body.day0 as { given?: boolean; date?: unknown; signature?: unknown; signatureMethod?: unknown; savedSignatureId?: unknown; savedSignatureVersion?: unknown } | undefined
+  const day0Input = body.day0 as { given?: boolean; date?: unknown; dose?: unknown; side?: unknown; animalStatus?: unknown; signature?: unknown; signatureMethod?: unknown; savedSignatureId?: unknown; savedSignatureVersion?: unknown } | undefined
   if (day0Input?.given && day0Input.date != null && (typeof day0Input.date !== 'string' || !realDate.safeParse(day0Input.date).success || day0Input.date > clinicDate())) return res.status(400).json({ error: 'Enter a valid Day 0 date that is not in the future.' })
+  if (day0Input?.given && (typeof day0Input.dose !== 'string' || typeof day0Input.side !== 'string' || !validDoseSide(day0Input.dose, day0Input.side))) return res.status(400).json({ error: 'Select the appropriate Day 0 injection side.' })
   if (day0Input?.signature) {
     if (!day0Input.given) return res.status(400).json({ error: 'Record Day 0 to save the vaccinator signature.' })
     try { readSignature(day0Input.signature, day0Input.signatureMethod) } catch { return res.status(400).json({ error: 'Choose a valid vaccinator signature.' }) }
@@ -582,6 +584,7 @@ clinicalRouter.patch('/encounters/:id', requirePage('exposure'), async (req, res
   const nextCategory = typeof body.category === 'string' ? body.category : existing.category
   const nextBooster = typeof body.booster === 'boolean' ? body.booster : existing.booster
   const nextPreExp = typeof body.preExp === 'boolean' ? body.preExp : existing.preExp
+  if (day0Input?.given && !nextPreExp && !['Alive', 'Lost/Stray', 'Dead'].includes(String(day0Input.animalStatus || ''))) return res.status(400).json({ error: 'Select the status of the biting animal for Day 0.' })
   if ((nextPreExp !== existing.preExp && existing.rer) || (nextPreExp && existing.billing !== 'Walk-in')) {
     const linked = [existing.id, existing.continuedFromEncounterId, existing.receivingEncounterId].filter(Boolean) as string[]
     const [paid, dose] = await Promise.all([
@@ -854,7 +857,7 @@ const doseSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   time: z.string().min(1),
   dose: z.string().min(1),
-  side: z.enum(['L', 'R']),
+  side: z.enum(['L', 'R', 'L/R']),
   animalStatus: z.enum(['', 'Alive', 'Lost/Stray', 'Dead']),
   vaccinator: z.string().min(1),
   batch: z.string().optional().default(''),
@@ -870,8 +873,7 @@ clinicalRouter.post('/encounters/:id/followup-payment', requirePage('payments'),
   const enc = await prisma.encounter.findUnique({ where: { id: req.params.id }, include: { patient: true } })
   if (!enc) return res.status(404).json({ error: 'Admission not found.' })
   if (!inScopeEncounter(req.user!, enc)) return res.status(403).json({ error: 'This is not your branch.' })
-  const philhealthFollowup = enc.category === 'III' && !enc.booster && !enc.preExp && ['PhilHealth','For PhilHealth'].includes(enc.billing) && isPhilhealthCashFollowUp(parsed.data.day)
-  if (!enc.rer || enc.remark === 'Transferred' || (!philhealthFollowup && enc.billing !== 'Walk-in')) return res.status(400).json({ error: 'Select an active cash follow-up case.' })
+  if (!enc.rer || enc.remark === 'Transferred' || enc.billing !== 'Walk-in') return res.status(400).json({ error: 'Select an active cash follow-up case.' })
   const service = boosterServiceForBrand(enc.brand) || 'Anti-rabies vaccine'
   const defaultPrice = service === 'Speeda' ? 150000 : 75000
   if (parsed.data.priceCentavos !== defaultPrice && !parsed.data.reason) return res.status(400).json({ error: 'Enter a reason for the price change.' })
@@ -940,13 +942,14 @@ clinicalRouter.post('/encounters/:id/followup-review', requirePage('payments'), 
 clinicalRouter.post('/encounters/:id/doses', requirePage('treatments'), async (req, res) => {
   const parsed = doseSchema.safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ error: 'Incomplete dose' })
+  if (!validDoseSide(parsed.data.dose, parsed.data.side)) return res.status(400).json({ error: 'Select the appropriate injection side for the dose.' })
   let doseSignature: ReturnType<typeof readSignature>
   try { doseSignature = readSignature(parsed.data.signature, parsed.data.signatureMethod) } catch { return res.status(400).json({ error: 'Choose a valid vaccinator signature.' }) }
   if(parsed.data.savedSignatureId&&doseSignature)return res.status(400).json({error:'Choose either a saved or a newly captured signature.'})
   const enc = await prisma.encounter.findUnique({ where: { id: req.params.id } })
   if (!enc) return res.status(404).json({ error: 'Admission not found' })
   if (!inScopeEncounter(req.user!, enc)) return res.status(403).json({ error: 'This is not your branch' })
-  if (!enc.preExp && !enc.booster && enc.regimen !== 'IM' && enc.day14Workflow !== 'optional' && !parsed.data.animalStatus) return res.status(400).json({ error: 'Clinical review is required before recording this dose without an animal status.' })
+  if (!enc.preExp && !parsed.data.animalStatus) return res.status(400).json({ error: 'Select the status of the biting animal.' })
   const servicing = servicingBranch(enc)
   const nurse = await resolveVaccinator(prisma, servicing, parsed.data.vaccinator)
   if (!nurse || nurse.name !== parsed.data.vaccinator) {
@@ -1041,10 +1044,11 @@ clinicalRouter.patch('/encounters/:id/doses/:day', requirePage('treatments'), as
   const enc = await prisma.encounter.findUnique({ where: { id: req.params.id } })
   if (!enc) return res.status(404).json({ error: 'Admission not found' })
   if (!inScopeEncounter(req.user!, enc)) return res.status(403).json({ error: 'This is not your branch' })
-  if (!enc.preExp && !enc.booster && enc.regimen !== 'IM' && enc.day14Workflow !== 'optional' && !parsed.data.animalStatus) return res.status(400).json({ error: 'Clinical review is required before correcting this dose without an animal status.' })
+  if (!enc.preExp && !parsed.data.animalStatus) return res.status(400).json({ error: 'Select the status of the biting animal.' })
   const servicing = servicingBranch(enc)
   const existing = await prisma.dose.findFirst({ where: { encounterId: enc.id, day: req.params.day } })
   if (!existing) return res.status(404).json({ error: 'Dose not found' })
+  if (!validDoseSideCorrection(parsed.data.dose, parsed.data.side, existing)) return res.status(400).json({ error: 'Select the appropriate injection side for the dose.' })
   const linkedIds = [enc.id, enc.continuedFromEncounterId || '', enc.receivingEncounterId || ''].filter(Boolean)
   const doses = await prisma.dose.findMany({ where: { encounterId: { in: linkedIds } } })
   const completed = caseInfo(enc, doses).status === 'Complete'
@@ -1208,8 +1212,8 @@ async function autoDay0Extras(
         date: day0.date || enc.date,
         time: day0.time || enc.time || new Date().toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' }),
         dose: day0.dose || day0DoseOf(enc),
-        side: day0.side === 'R' ? 'R' : 'L',
-        animalStatus: day0.animalStatus === 'Lost/Stray' || day0.animalStatus === 'Dead' ? day0.animalStatus : 'Alive',
+        side: day0.side === 'L/R' ? 'L/R' : day0.side === 'R' ? 'R' : 'L',
+        animalStatus: day0.animalStatus === 'Lost/Stray' || day0.animalStatus === 'Dead' || day0.animalStatus === 'Alive' ? day0.animalStatus : '',
         vaccinator: nurse.name,
         batch: day0.batch || ''
       }, by)
@@ -1302,7 +1306,7 @@ clinicalRouter.post('/payments', requirePage('payments'), async (req, res) => {
   const classification = booster ? 'Walk-in' : String(req.body.classification || enc.billing || enc.patient.classification)
   if (enc.preExp && classification !== 'Walk-in') return res.status(400).json({ error: 'Pre-exposure treatment is billed as Walk-in, not PhilHealth.' })
   if (enc.preExp && enc.billing !== 'Walk-in') return res.status(409).json({ error: 'Review and save the PrEP RER billing before collecting payment.' })
-  if (intent === 'collect' && enc.category === 'III' && !enc.preExp && !booster && ['PhilHealth','For PhilHealth'].includes(enc.billing) && classification === 'Walk-in') return res.status(400).json({ error: 'Collect PhilHealth follow-up payments from the corresponding dose on Treatment.' })
+  if (intent === 'collect' && enc.category === 'III' && !enc.preExp && !booster && ['PhilHealth','For PhilHealth'].includes(enc.billing) && classification === 'Walk-in') return res.status(400).json({ error: 'PhilHealth visits have no cash follow-up charge.' })
   if (enc.category === 'II' && !enc.preExp && (classification === 'PhilHealth' || classification === 'For PhilHealth')) return res.status(400).json({ error: 'Category II is billed as Walk-in under the clinic policy.' })
   if ((classification === 'PhilHealth' || classification === 'For PhilHealth') && !enc.patient.philhealth) return res.status(400).json({ error: 'Confirm PhilHealth membership in the patient record first.' })
   const free = !booster && (classification === 'PhilHealth' || classification === 'For PhilHealth')

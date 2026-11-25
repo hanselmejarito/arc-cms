@@ -34,18 +34,20 @@ const reportedDose = { encounterId: 'test', day: 'D14', date: '2026-11-15', anim
 assert.equal(client.registryRows([reportCase], [...base, reportedDose], [patient])[0].d14, '2026-11-15')
 async function checkStockPath() {
   const consumed = []
-  const dose = load('lib/doses.ts', { './auth.js': { servicingBranch: () => 'Guimba' }, './clinical.js': server, './ids.js': { nextId: async () => 'movement' }, './inventory.js': { doseUses: () => 2, applyConsume: async (_tx, item, branch, uses, batch) => { consumed.push({ item, branch, uses, batch }); return { line: { batch, shift: 'MS' }, vials: 0 } } }, './staffSignatures.js': {}, './nurseDuty.js': {} })
+  const dose = load('lib/doses.ts', { '../src/doseSide.js': load('src/doseSide.js'), './auth.js': { servicingBranch: () => 'Guimba' }, './clinical.js': server, './ids.js': { nextId: async () => 'movement' }, './inventory.js': { doseUses: () => 2, applyConsume: async (_tx, item, branch, uses, batch) => { consumed.push({ item, branch, uses, batch }); return { line: { batch, shift: 'MS' }, vials: 0 } } }, './staffSignatures.js': {}, './nurseDuty.js': {} })
   const stored = []
   let updates = 0
   const tx = { dose: { create: async x => { stored.push(x.data); return x.data } }, encounter: { update: async () => { updates++; return {} } }, movement: { create: async x => x.data } }
-  const result = await dose.createDoseInTx(tx, { ...optional, branch: 'Guimba', brand: 'Bioshoot', vaccine: 'PVRV', registry: 'TEST' }, { day: 'D14', date: '2026-11-15', time: '09:00', dose: '0.1 mL × 2 sites ID', side: 'L', animalStatus: '', vaccinator: 'Synthetic', batch: 'batch' }, 'Synthetic', base)
+  await assert.rejects(() => dose.createDoseInTx(tx, { ...optional, branch: 'Guimba', brand: 'Bioshoot', vaccine: 'PVRV', registry: 'TEST' }, { day: 'D14', date: '2026-11-15', time: '09:00', dose: '0.1 mL � 2 sites ID', side: 'L/R', animalStatus: '', vaccinator: 'Synthetic', batch: 'batch' }, 'Synthetic', base), /Select the status/ )
+  const result = await dose.createDoseInTx(tx, { ...optional, branch: 'Guimba', brand: 'Bioshoot', vaccine: 'PVRV', registry: 'TEST' }, { day: 'D14', date: '2026-11-15', time: '09:00', dose: '0.1 mL × 2 sites ID', side: 'L/R', animalStatus: 'Dead', vaccinator: 'Synthetic', batch: 'batch' }, 'Synthetic', base)
   assert.equal(result.created.day, 'D14')
+  assert.equal(result.created.side, 'L/R')
   assert.deepEqual(consumed, [{ item: 'Bioshoot', branch: 'Guimba', uses: 2, batch: 'batch' }])
   assert.equal(result.movement.uses, 2)
   assert.equal(stored.length, 1)
-  assert.equal(updates, 0, 'No status entered should preserve the previously recorded animal status')
-  await dose.createDoseInTx(tx, { ...optional, branch: 'Guimba', brand: 'Bioshoot', vaccine: 'PVRV', registry: 'TEST' }, { day: 'D14', date: '2026-11-15', time: '09:00', dose: '0.1 mL × 2 sites ID', side: 'L', animalStatus: 'Dead', vaccinator: 'Synthetic', batch: 'batch' }, 'Synthetic', base)
+  assert.equal(updates, 1, 'The selected status must be saved')
+  await dose.createDoseInTx(tx, { ...optional, branch: 'Guimba', brand: 'Bioshoot', vaccine: 'PVRV', registry: 'TEST' }, { day: 'D14', date: '2026-11-15', time: '09:00', dose: '0.1 mL × 2 sites ID', side: 'L/R', animalStatus: 'Dead', vaccinator: 'Synthetic', batch: 'batch' }, 'Synthetic', base)
   assert.equal(stored[1].animalStatus, 'Dead')
-  assert.equal(updates, 1, 'The selected animal status must be saved with the dose')
+  assert.equal(updates, 2, 'The selected animal status must be saved with the dose')
 }
 checkStockPath().then(() => console.log('Optional and legacy Day 14 protocol and stock path checks passed')).catch(error => { console.error(error); process.exitCode = 1 })

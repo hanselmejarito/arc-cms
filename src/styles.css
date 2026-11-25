@@ -217,24 +217,45 @@ html.print-admission .soap-paper .arc-box{width:11px;height:11px}
 .arc-form-logo .brand-logo{width:100%;height:100%;object-fit:cover;display:block}
 .registry-head{position:relative;min-height:62px;justify-content:center;padding:0 80px}
 .registry-head .registry-logo{position:absolute;left:0;top:0;width:60px;height:60px}
+.registry-head .report-logo{position:absolute;top:50%;width:90px;height:90px;object-fit:contain;transform:translateY(-50%)}
+.registry-head .report-logo-left{left:max(0px,calc(50% - 390px))}
+.registry-head .report-logo-right{right:max(0px,calc(50% - 390px))}
 .doh-print-parts{display:none}
+.registry-print-parts{display:none}
 @media print{
- html.print-doh .doh-sheet{display:none!important}
+ html.print-registry .registry-sheet,html.print-registry .form-sheet.registry-sheet{display:none!important}
+ html.print-registry .registry-print-parts{display:block;color:#111;background:#fff;margin-left:6mm;margin-right:2mm}
+ html.print-registry .registry-print-part{break-after:page;page-break-after:always}
+ html.print-registry .registry-print-part:last-child{break-after:auto;page-break-after:auto}
+ html.print-registry .registry-print-head{display:grid;grid-template-columns:23mm minmax(0,115mm) 23mm;justify-content:center;align-items:center;text-align:center;gap:5mm;margin-bottom:3mm;font-size:9pt}
+ html.print-registry .registry-print-head img{width:23mm;height:23mm;object-fit:contain}
+ html.print-registry .registry-print-head strong{font-size:12pt}
+ html.print-registry .registry-print-head h3{font-size:12pt;margin:1mm 0}
+ html.print-registry .registry-print-note,html.print-registry .registry-print-legend{font-size:7pt;margin:2mm 0}
+ html.print-registry .registry-print-table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:7.5pt}
+ html.print-registry .registry-print-table th,html.print-registry .registry-print-table td{border:1px solid #333;padding:2px;vertical-align:top;white-space:normal;word-break:normal;overflow-wrap:anywhere;line-height:1.2;color:#111}
+ html.print-registry .registry-print-table thead th{background:#e5f1ef!important;text-align:center;vertical-align:middle;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+ html.print-registry .registry-print-table tbody td{text-align:center}
+ html.print-registry .registry-print-table-0 tbody td:nth-child(3),html.print-registry .registry-print-table-0 tbody td:nth-child(5),html.print-registry .registry-print-table-0 tbody td:nth-child(9),html.print-registry .registry-print-table-1 tbody td:nth-child(2),html.print-registry .registry-print-table-1 tbody td:last-child{text-align:left}
+ html.print-registry .registry-print-table tr{break-inside:avoid;page-break-inside:avoid}
+ html.print-doh .doh-sheet,html.print-doh .form-sheet.doh-sheet{display:none!important}
  html.print-doh .doh-print-parts{display:block;color:#111;background:#fff}
  html.print-doh .doh-print-part{break-after:page;page-break-after:always}
  html.print-doh .doh-print-part:last-child{break-after:auto;page-break-after:auto}
- html.print-doh .doh-print-head{display:grid;grid-template-columns:20mm 1fr 20mm;align-items:center;text-align:center;margin:0 0 3mm}
+ html.print-doh .doh-print-head{display:grid;grid-template-columns:22mm minmax(0,120mm) 22mm;justify-content:center;gap:4mm;align-items:center;text-align:center;margin:0 0 3mm}
  html.print-doh .doh-print-head .arc-form-logo{width:16mm;height:16mm}
+ html.print-doh .doh-print-head .report-print-logo{width:21mm;height:21mm;object-fit:contain}
  html.print-doh .doh-print-head strong{font-size:10pt}
  html.print-doh .doh-print-head div{font-size:8pt}
  html.print-doh .doh-print-head h3{font-size:11pt;margin:1mm 0}
  html.print-doh .doh-print-note{font-size:7pt;margin:0 0 2mm}
- html.print-doh .doh-part-table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:8pt}
+ html.print-doh .doh-part-table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:7pt;line-height:1.1}
  html.print-doh .doh-part-table thead{display:table-header-group}
  html.print-doh .doh-part-table tr{break-inside:avoid;page-break-inside:avoid}
  html.print-doh .doh-part-table th,html.print-doh .doh-part-table td{border:1px solid #333;padding:2px;vertical-align:top;white-space:normal;overflow-wrap:anywhere;text-align:center;color:#111!important;letter-spacing:normal}
- html.print-doh .doh-part-table th:first-child{width:15%;text-align:left}
- html.print-doh .doh-part-table thead th{font-size:7pt}
+ html.print-doh .doh-part-table thead th{background:#e5f1ef!important;vertical-align:middle;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+ html.print-doh .doh-part-table th:first-child{width:10%;text-align:left}
+ html.print-doh .doh-part-table thead th{font-size:6pt;white-space:normal;overflow-wrap:anywhere}
  html.print-doh .doh-part-table tfoot{font-weight:700}
 }
 .arc-form-title{min-width:0}
@@ -493,3 +514,5 @@ html.print-admission .soap-signature-overlay{max-width:30mm;max-height:16mm}
 }
 
 .audit-values{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin:18px 0}.audit-values small{display:block;color:#7d8aa0;font-weight:700;margin-bottom:6px}.audit-values pre{margin:0;padding:12px;border:1px solid #e2eaea;border-radius:8px;white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;line-height:1.5;background:#f8fbfa}
+
+.dose-side-automatic .choice-group button.active:disabled{opacity:1;cursor:default}

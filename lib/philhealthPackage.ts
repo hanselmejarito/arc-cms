@@ -9,7 +9,3 @@ export const PHILHEALTH_CATEGORY_III_PACKAGE = [
 export const PHILHEALTH_PACKAGE_TOTAL_CENTAVOS = PHILHEALTH_CATEGORY_III_PACKAGE.reduce(
   (total, item) => total + item.quantity * item.unitValueCentavos, 0
 )
-
-export function isPhilhealthCashFollowUp(day: string) {
-  return ['D14', 'D21', 'D28'].includes(day)
-}

@@ -5,6 +5,7 @@ import { nextId } from './ids.js'
 import { applyConsume, doseUses } from './inventory.js'
 import { auditSavedSignatureUse, resolveStaffSignature } from './staffSignatures.js'
 import { nursesByDuty } from './nurseDuty.js'
+import { TWO_SITE_ID } from '../src/doseSide.js'
 
 type Tx = Omit<PrismaClient, '$connect' | '$disconnect' | '$on' | '$transaction' | '$use' | '$extends'>
 
@@ -13,7 +14,7 @@ export type DoseInput = {
   date: string
   time: string
   dose: string
-  side: 'L' | 'R'
+  side: 'L' | 'R' | 'L/R'
   animalStatus: '' | 'Alive' | 'Lost/Stray' | 'Dead'
   vaccinator: string
   batch?: string
@@ -52,6 +53,7 @@ export function autoDay0Skip(enc: Encounter, pays: Payment[]) {
 }
 
 export async function createDoseInTx(tx: Tx, enc: Encounter, input: DoseInput, by: string, prior: { encounterId: string; day: string; date: string; animalStatus?: string }[] = []) {
+  if (!enc.preExp && !['Alive', 'Lost/Stray', 'Dead'].includes(input.animalStatus)) throw new Error('Select the status of the biting animal.')
   const protocol = protocolOf({ ...enc, animalStatus: input.animalStatus }, [...prior, { encounterId: enc.id, day: input.day, date: input.date, animalStatus: input.animalStatus }])
   const k = protocol.days.findIndex(x => x[0] === input.day)
   if (k < 0) throw new Error('Day is not on this protocol')
@@ -111,8 +113,9 @@ export async function tryAutoDay0(tx: Tx, enc: Encounter, pays: Payment[], by: s
   if(savedSignatureId&&nurse.name!==vaccinator)throw new Error('No Nurse matching the selected vaccinator at '+servicing)
   const signature=savedSignatureId?await resolveStaffSignature(tx,savedSignatureId,'Nurse',nurse.name,servicing,savedSignatureVersion||''):null
   if(savedSignatureId){if(!recordedBy)throw new Error('The saved signature requires an identified user.');await auditSavedSignatureUse(tx,{id:recordedBy,name:by},savedSignatureId,enc.registry+' · D0',servicing)}
-  const side = enc.side === 'R' ? 'R' : 'L'
-  const animalStatus = enc.animalStatus === 'Lost/Stray' || enc.animalStatus === 'Dead' ? enc.animalStatus : 'Alive'
+  const side = day0DoseOf(enc) === TWO_SITE_ID ? 'L/R' : enc.side === 'R' ? 'R' : 'L'
+  if (!enc.preExp && !['Alive', 'Lost/Stray', 'Dead'].includes(enc.animalStatus)) return { skipped: true as const, reason: 'animal-status' }
+  const animalStatus = enc.animalStatus === 'Lost/Stray' || enc.animalStatus === 'Dead' || enc.animalStatus === 'Alive' ? enc.animalStatus : ''
   return createDoseInTx(tx, enc, {
     day: 'D0',
     date: enc.date,

@@ -2,6 +2,7 @@ import React from 'react'
 import { BrandLogo } from '../components'
 import { addDays, fmt, money, periodInputsFromAttendance } from '../data'
 import { attendanceForBranch } from '../dutyAllocation'
+import { buildReportXlsx } from '../xlsxExport'
 
 const datesFor = period => {
   const dates=[]
@@ -14,7 +15,7 @@ function Signatories(){return <div className="hr-signatories">{['Prepared by','C
 export function AttendancePrint({employees,attendance,users,period,overtimeRequests,temporaryBranchEnabled=false,branchFilter='All branches',branchMaster}){
  const days=datesFor(period),userEmployee=new Map((users||[]).map(u=>[u.id,u.employeeId||u.employee]))
  const assignments=temporaryBranchEnabled?employees.flatMap(e=>{const own=attendance.filter(r=>r.date>=period.from&&r.date<=period.to&&(r.employeeId===e.id||userEmployee.get(r.userId)===e.id));const names=new Set([e.branch,...own.flatMap(r=>[r.in?r.branch:null,r.nightIn?(r.nightBranch||r.branch):null])].filter(Boolean));return [...names].filter(name=>branchFilter==='All branches'||branchFilter===name).map(name=>({...e,branch:name}))}):employees
- return <div className="hr-print-document">{branchGroups(assignments).map(([branch,staff])=><section className="hr-sheet" key={branch}><Header branch={branch} period={period} title="ATTENDANCE SUMMARY OF EMPLOYEES"/>
+ return <div className="hr-print-document">{branchGroups(assignments).map(([branch,staff])=><section className="hr-sheet" data-branch={branch} key={branch}><Header branch={branch} period={period} title="ATTENDANCE SUMMARY OF EMPLOYEES"/>
  <table className="hr-table hr-attendance-table"><thead><tr><th>Employee</th>{days.map(day=><th key={day}>{Number(day.slice(8,10))}</th>)}<th>Recorded days</th><th>Review</th></tr></thead><tbody>{staff.map(e=>{
   const owned=attendance.filter(r=>r.date>=period.from&&r.date<=period.to&&(r.employeeId===e.id||userEmployee.get(r.userId)===e.id))
   const records=temporaryBranchEnabled?attendanceForBranch(owned,branch):owned.filter(r=>r.branch===branch)
@@ -25,9 +26,27 @@ export function AttendancePrint({employees,attendance,users,period,overtimeReque
  })}</tbody></table><p className="hr-legend">P = completed time in/out · 2 = completed morning and night shifts · ? = needs review · — = no recorded attendance; not automatically absent. Days with ? are excluded from recorded-day totals.</p><Signatories/></section>)}</div>
 }
 export function PayrollPrint({rows,period}){
- return <div className="hr-print-document">{branchGroups(rows).map(([branch,staff])=><section className="hr-sheet" key={branch}><Header branch={branch} period={period} title="PAYROLL REGISTER"/>
+ return <div className="hr-print-document">{branchGroups(rows).map(([branch,staff])=><section className="hr-sheet" data-branch={branch} key={branch}><Header branch={branch} period={period} title="PAYROLL REGISTER"/>
  <p className="hr-legend">Based on saved payroll inputs and recorded attendance. Amounts are for review; signatures below are handwritten.</p>
  <table className="hr-table hr-payroll-table"><thead><tr><th>Employee</th><th>Days</th><th>Night shifts</th><th>Basic</th><th>OT</th><th>Night diff.</th><th>Holiday</th><th>OB</th><th>Allowance</th><th>Gross</th><th>Late / UT</th><th>SSS</th><th>PhilHealth</th><th>Pag-IBIG</th><th>Other</th><th>Net</th><th>Signature</th></tr></thead><tbody>{staff.map(r=><tr key={r.id}><td className="hr-name">{r.name}</td><td>{r.c.calendarDays}</td><td>{r.c.nightShiftDays}</td>{[r.c.basic,r.c.otPay,r.c.nightPay,r.c.holidayPay,r.c.obPay,r.c.allowance,r.c.gross,r.c.lateDed+r.c.underDed,r.c.sss,r.c.phil,r.c.pagibig,r.c.other,r.c.net].map((n,i)=><td key={i} className="hr-amount">{money(n)}</td>)}<td/></tr>)}</tbody><tfoot><tr><th>Total</th><th/><th/>{['basic','otPay','nightPay','holidayPay','obPay','allowance','gross'].map(key=><th key={key}>{money(staff.reduce((a,r)=>a+r.c[key],0))}</th>)}<th>{money(staff.reduce((a,r)=>a+r.c.lateDed+r.c.underDed,0))}</th>{['sss','phil','pagibig','other','net'].map(key=><th key={key}>{money(staff.reduce((a,r)=>a+r.c[key],0))}</th>)}<th/></tr></tfoot></table><Signatories/></section>)}</div>
+}
+export function downloadHrDocument(id,filename,title,period){
+ const sections=[...(document.getElementById(id)?.querySelectorAll('.hr-sheet')||[])]
+ if(!sections.length)return false
+ const table=document.createElement('table'),body=document.createElement('tbody')
+ table.appendChild(body)
+ sections.forEach(section=>{
+  const branch=section.dataset.branch||''
+  section.querySelectorAll('table tr').forEach(source=>{
+   const row=source.cloneNode(true),cell=document.createElement(source.closest('thead')?'th':'td')
+   if(source.closest('tfoot'))row.classList.add('hr-total')
+   cell.textContent=source.closest('thead')?'Branch':branch
+   row.prepend(cell);body.appendChild(row)
+  })
+ })
+ const url=URL.createObjectURL(buildReportXlsx(table,[title,period])),anchor=document.createElement('a')
+ anchor.href=url;anchor.download=filename;anchor.click();window.setTimeout(()=>URL.revokeObjectURL(url),60000)
+ return true
 }
 export function printHrDocument(id){
  const source=document.getElementById(id)

@@ -276,7 +276,7 @@ export function RerSheet({e,p,doses}){
     <p>{paperPlace(br)}</p>
     <small>Mobile No: {(br.contact||'09469451531').replace(/\s/g,'')} / EMAIL ADDRESS arcantirabisclinic@gmail.com</small>
    </div>
-   <span className="arc-patient-photo">{p.photo?<img src={p.photo} alt="Patient photo"/>:null}</span>
+   {p.photo?<span className="arc-patient-photo"><img src={p.photo} alt="Patient photo"/></span>:<span aria-hidden="true"/>}
   </header>
 
   <div className="arc-id">
