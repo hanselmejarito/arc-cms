@@ -25,6 +25,13 @@ for (const billing of ['PhilHealth','For PhilHealth']) {
 }
 const walkIn=openBillLines({...encounter,billing:'Walk-in',category:'II'})
 assert.deepEqual(walkIn.map(x=>[x.service,x.price,x.status]),[['Anti-rabies vaccine',750,'Pending']])
+for (const category of ['II','III']) {
+  const lines=openBillLines({...encounter,billing:'Walk-in',category,brand:'Speeda'})
+  assert.deepEqual([lines[0].service,lines[0].price],['Speeda',1500])
+  if (category==='III') assert.equal(lines.reduce((total,line)=>total+line.price,0),4400)
+}
+assert.deepEqual(openBillLines({...encounter,billing:'Walk-in',preExp:true,brand:'Speeda'}).map(x=>[x.service,x.price]),[['Speeda',1500]])
+assert.equal(openBillLines({...encounter,billing:'PhilHealth',brand:'Speeda'})[0].price,0)
 assert.equal(needsOpenBillRewrite(encounter,[{status:'Paid',amount:0,service:'Anti-rabies vaccine'}]),false)
 assert.equal(needsOpenBillRewrite(encounter,[{status:'Paid',amount:750,service:'Anti-rabies vaccine'}]),false)
 assert.equal(needsOpenBillRewrite(encounter,[{status:'Not billed',amount:0,service:'Anti-rabies vaccine'}]),true)

@@ -491,3 +491,5 @@ html.print-admission .soap-signature-overlay{max-width:30mm;max-height:16mm}
  html.print-hr .hr-signatories i{display:block;border-bottom:1px solid #111;height:10mm}
  html.print-hr .hr-signatories small{text-align:center;font-size:7pt}
 }
+
+.audit-values{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin:18px 0}.audit-values small{display:block;color:#7d8aa0;font-weight:700;margin-bottom:6px}.audit-values pre{margin:0;padding:12px;border:1px solid #e2eaea;border-radius:8px;white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;line-height:1.5;background:#f8fbfa}

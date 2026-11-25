@@ -1,0 +1,16 @@
+const fs=require('node:fs'),ts=require('typescript'),assert=require('node:assert/strict')
+function load(file){const o={};const js=ts.transpileModule(fs.readFileSync(file,'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;new Function('exports',js)(o);return o}
+const policy=load('lib/treatmentRecordLock.ts')
+assert.equal(policy.treatmentRecorded('tt',{given:false,date:'',time:'',refused:false,withPrevious:false}),false)
+assert.equal(policy.treatmentRecorded('erig',{infiltration:false}),true)
+assert.equal(policy.treatmentChanged('tt',{given:true,date:'2026-11-25'},{date:'2026-11-25',given:true}),false)
+const source=fs.readFileSync('lib/routes/clinical.ts','utf8'),start=source.indexOf("clinicalRouter.patch('/encounters/:id',"),end=source.indexOf('\nconst realDate',start)
+assert(start>=0&&end>start)
+const js=ts.transpileModule(source.slice(start,end),{compilerOptions:{target:ts.ScriptTarget.ES2022}}).outputText
+let handler,events=[],writes=0
+const base={id:'E',registry:'TEST',patientId:'P',branch:'Guimba',category:'III',billing:'Walk-in',rer:true,booster:false,preExp:false,consentSignature:null,doctorSignature:null,tt:{given:true,date:'2026-11-25',time:'08:00',refused:false,withPrevious:false},erig:{brand:'Equirab',date:'2026-11-25',skinTime:'',skinResult:'',weight:'',infiltration:null,ml:'',refused:false}}
+const db={encounter:{findUnique:async()=>base},$transaction:async fn=>fn({encounter:{findUniqueOrThrow:async()=>base,update:async({data})=>{writes++;return {...base,...data}}},auditLog:{create:async({data})=>events.push(data)},patient:{findUnique:async()=>({name:'Synthetic'})}})}
+const deps={...policy,clinicalRouter:{patch:(_p,_g,h)=>{handler=h}},requirePage:()=>()=>{},prisma:db,inScopeEncounter:()=>true,HIGH_RISK_SITES:new Set(),boosterServiceForBrand:()=>null,blankErig:{},blankTt:{},servicingBranch:()=> 'Guimba',syncOpenBill:async()=>[],audit:async()=>{},encounterClient:x=>x,paymentClient:x=>x,clinicDate:()=> '2026-11-25',autoDay0Extras:async()=>({})}
+new Function(...Object.keys(deps),js)(...Object.values(deps))
+async function call(role,body){const req={params:{id:'E'},user:{id:'U',name:'Tester',role},body,userAgent:'test'};const res={code:200,status(n){this.code=n;return this},json(body){this.body=body;return this}};await handler(req,res);return res}
+;(async()=>{const edited={...base.tt,time:'09:00'};assert.equal((await call('Nurse',{tt:edited,treatmentCorrectionReason:'Time error'})).code,403);assert.equal((await call('Admin',{tt:edited})).code,400);assert.equal((await call('Admin',{tt:{...base.tt,given:false,refused:true},treatmentCorrectionReason:'test'})).code,409);assert.equal(writes,0);assert.equal((await call('Admin',{tt:edited,treatmentCorrectionReason:'Time error'})).code,200);assert.equal(JSON.parse(events[0].oldValue).time,'08:00');assert.equal(JSON.parse(events[0].newValue).time,'09:00');assert.equal(JSON.parse(events[0].newValue).reason,'Time error');assert.equal((await call('Superadmin',{erig:{...base.erig,ml:'2'},treatmentCorrectionReason:'Correct volume'})).code,200);assert.equal(JSON.parse(events[1].newValue).ml,'2');console.log('Saved TT/ERIG lock, correction access, inventory guard and audit: PASS')})().catch(e=>{console.error(e);process.exitCode=1})

@@ -128,10 +128,12 @@ export const services=[{name:'Anti-rabies vaccine',price:750},{name:'ERIG (serum
 export const servicePrice=name=>(services.find(s=>s.name===name)||{}).price||0
 export function billLinesFor(e){
   const qty=1
-  if(!e||e.preExp)return [{service:'Anti-rabies vaccine',qty}]
+  if(!e)return [{service:'Anti-rabies vaccine',qty}]
+  const vaccine=e.brand?.trim().toLowerCase()==='speeda'?'Speeda':'Anti-rabies vaccine'
+  if(e.preExp)return [{service:vaccine,qty}]
   if(e.booster)return e.brand?.trim()?[{service:e.brand.trim().toLowerCase()==='speeda'?'Speeda':'Anti-rabies vaccine',qty}]:[]
-  if(e.category==='III')return [{service:'Anti-rabies vaccine',qty},{service:'ERIG (serum)',qty},{service:'Tetanus Toxoid',qty}]
-  if(e.category==='II')return [{service:'Anti-rabies vaccine',qty}]
+  if(e.category==='III')return [{service:vaccine,qty},{service:'ERIG (serum)',qty},{service:'Tetanus Toxoid',qty}]
+  if(e.category==='II')return [{service:vaccine,qty}]
   return [{service:'Anti-rabies vaccine',qty}]
 }
 export const isPhilhealthBill=c=>c==='PhilHealth'||c==='For PhilHealth'

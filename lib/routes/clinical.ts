@@ -18,6 +18,7 @@ import {
 } from '../map.js'
 import { issueRegistry, issueTxn, nextPrefixedId, peekRegistry } from '../registry.js'
 import { addsOtherOnlyServices, boosterServiceForBrand, isBoosterVaccineLine } from '../billingPolicy.js'
+import { treatmentChanged, treatmentRecorded, treatmentSnapshot, type TreatmentKind } from '../treatmentRecordLock.js'
 import { ensureFollowupCharge } from '../followupCharge.js'
 import { workspaceExtras } from './ops.js'
 import { readPhoto } from '../photoInput.js'
@@ -450,15 +451,17 @@ clinicalRouter.post('/admissions', requirePage('admissions'), async (req, res) =
 })
 
 function openBillLines(enc: { billing: string, booster: boolean, preExp: boolean, category: string, brand: string }) {
-  if (enc.preExp) return [{ service: 'Anti-rabies vaccine', price: 750, status: 'Pending' as const, remarks: 'Not yet paid · pre-exposure' }]
+  const vaccine = boosterServiceForBrand(enc.brand) || 'Anti-rabies vaccine'
+  const vaccinePrice = vaccine === 'Speeda' ? 1500 : 750
+  if (enc.preExp) return [{ service: vaccine, price: vaccinePrice, status: 'Pending' as const, remarks: 'Not yet paid · pre-exposure' }]
   if (enc.booster) { const service = boosterServiceForBrand(enc.brand); return service ? [{ service, price: service === 'Speeda' ? 1500 : 750, status: 'Pending' as const, remarks: 'Not yet paid' }] : [] }
   if ((enc.billing === 'PhilHealth' || enc.billing === 'For PhilHealth') && enc.category === 'III' && !enc.preExp) return PHILHEALTH_CATEGORY_III_PACKAGE.map(item => ({ service: item.service, price: 0, status: 'Not billed' as const, quantity: item.quantity, unitPriceCentavos: item.unitValueCentavos, claimValueCentavos: item.quantity * item.unitValueCentavos, remarks: enc.billing === 'PhilHealth' ? '₱0 patient charge · PhilHealth package value, claim not confirmed' : 'Not billed · pending referral for PhilHealth' }))
   if (enc.billing === 'PhilHealth') return [{ service: 'Anti-rabies vaccine', price: 0, status: 'Not billed' as const, remarks: '₱0 · PhilHealth' }]
   if (enc.billing === 'For PhilHealth') return [{ service: 'Anti-rabies vaccine', price: 0, status: 'Not billed' as const, remarks: 'Not billed · give Day 0 then refer for PhilHealth' }]
   if (enc.billing && enc.billing !== 'Walk-in') return []
-  if (enc.preExp || enc.category === 'II') return [{ service: 'Anti-rabies vaccine', price: 750, status: 'Pending' as const, remarks: 'Not yet paid' }]
+  if (enc.category === 'II') return [{ service: vaccine, price: vaccinePrice, status: 'Pending' as const, remarks: 'Not yet paid' }]
   if (enc.category === 'III') return [
-    { service: 'Anti-rabies vaccine', price: 750, status: 'Pending' as const, remarks: 'Not yet paid' },
+    { service: vaccine, price: vaccinePrice, status: 'Pending' as const, remarks: 'Not yet paid' },
     { service: 'ERIG (serum)', price: 2600, status: 'Pending' as const, remarks: 'Not yet paid' },
     { service: 'Tetanus Toxoid', price: 300, status: 'Pending' as const, remarks: 'Not yet paid' }
   ]
@@ -499,7 +502,12 @@ function needsOpenBillRewrite(enc: Encounter, rows: Payment[]) {
 }
 
 async function repairStaleOpenBills(encounters: Encounter[], payments: Payment[]) {
-  const stale = encounters.filter(enc => !enc.past && enc.rer && enc.billing !== 'PhilHealth' && enc.billing !== 'For PhilHealth' && needsOpenBillRewrite(enc, payments.filter(p => p.encounterId === enc.id)))
+  const stale = encounters.filter(enc => {
+    const rows = payments.filter(p => p.encounterId === enc.id)
+    // Do not silently rewrite a pre-existing generic bill merely because its brand is Speeda.
+    if (!enc.booster && enc.brand?.trim().toLowerCase() === 'speeda' && !needsOpenBillRewrite({ ...enc, brand: '' }, rows)) return false
+    return !enc.past && enc.rer && enc.billing !== 'PhilHealth' && enc.billing !== 'For PhilHealth' && needsOpenBillRewrite(enc, rows)
+  })
   if (!stale.length) return payments
   const names = new Map((await prisma.patient.findMany({
     where: { id: { in: stale.map(e => e.patientId) } },
@@ -700,6 +708,11 @@ clinicalRouter.patch('/encounters/:id', requirePage('exposure'), async (req, res
   ]
   const data: Record<string, unknown> = {}
   for (const k of allowed) if (k in body) data[k] = body[k]
+  const corrections = (['tt', 'erig'] as TreatmentKind[]).filter(kind => kind in data && treatmentRecorded(kind, existing[kind]) && treatmentChanged(kind, existing[kind], data[kind]))
+  const correctionReason = typeof body.treatmentCorrectionReason === 'string' ? body.treatmentCorrectionReason.trim() : ''
+  if (corrections.length && !['Admin', 'Superadmin'].includes(req.user!.role)) return res.status(403).json({ error: 'Only Admin or Superadmin can correct saved TT or ERIG details.' })
+  if (corrections.length && (!correctionReason || correctionReason.length > 500)) return res.status(400).json({ error: 'Enter a correction reason of up to 500 characters.' })
+  if (corrections.includes('tt') && treatmentSnapshot('tt', existing.tt).given === true && treatmentSnapshot('tt', data.tt).given !== true) return res.status(409).json({ error: 'A recorded TT dose cannot be reversed here; inventory needs review.' })
   const pendingDay0SignerId=typeof body.pendingDay0SignerId==='string'?body.pendingDay0SignerId:''
   const pendingDay0Vaccinator=typeof body.pendingDay0Vaccinator==='string'?body.pendingDay0Vaccinator:''
   const pendingDay0SignerVersion=typeof body.pendingDay0SignerVersion==='string'?body.pendingDay0SignerVersion:''
@@ -722,6 +735,10 @@ clinicalRouter.patch('/encounters/:id', requirePage('exposure'), async (req, res
   const servicing = servicingBranch(existing)
   try {
     const result = await prisma.$transaction(async tx => {
+      if (corrections.length) {
+        const current = await tx.encounter.findUniqueOrThrow({ where: { id: existing.id } })
+        if (corrections.some(kind => treatmentChanged(kind, existing[kind], current[kind]))) throw new Error('Treatment details changed. Reload and try again.')
+      }
       if('pendingDay0SignerId' in body){if(pendingDay0SignerId)await resolveStaffSignature(tx,pendingDay0SignerId,'Nurse',pendingDay0Vaccinator,servicing,pendingDay0SignerVersion);data.pendingDay0SignerId=pendingDay0SignerId||null;data.pendingDay0Vaccinator=pendingDay0SignerId?pendingDay0Vaccinator:null;data.pendingDay0SignerVersion=pendingDay0SignerId?pendingDay0SignerVersion:null}
       if (savedDoctorSignatureId) {
         const signer=await resolveStaffSignature(tx,savedDoctorSignatureId,'Doctor',String(body.doctor),servicing,savedDoctorSignatureVersion)
@@ -759,6 +776,7 @@ clinicalRouter.patch('/encounters/:id', requirePage('exposure'), async (req, res
       const updated = signatureToSave || doctorSignatureToSave || savedDoctorSignatureId
         ? await tx.encounter.findUniqueOrThrow({ where: { id: existing.id } })
         : await tx.encounter.update({ where: { id: existing.id }, data })
+      for (const kind of corrections) await tx.auditLog.create({ data: { userId: req.user!.id, userName: req.user!.name + ' (' + req.user!.role + ')', module: 'Treatment', action: kind === 'tt' ? 'Corrected Tetanus Toxoid' : 'Corrected ERIG', record: existing.registry, branch: servicing, oldValue: JSON.stringify(treatmentSnapshot(kind, existing[kind])), newValue: JSON.stringify({ ...treatmentSnapshot(kind, updated[kind]), reason: correctionReason }), time: clinicDate() + ' · ' + new Date().toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' }), device: req.userAgent } })
       const patient = await tx.patient.findUnique({ where: { id: updated.patientId } })
       const payments = await syncOpenBill(tx, existing, updated, patient?.name || '')
       return { updated, line, movement, payments }
@@ -783,7 +801,7 @@ clinicalRouter.patch('/encounters/:id', requirePage('exposure'), async (req, res
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unable to save'
-    if (msg.startsWith('No usable') || msg.startsWith('Insufficient') || msg.startsWith('The saved signature') || msg.startsWith('The selected')) return res.status(409).json({ error: msg })
+    if (msg.startsWith('No usable') || msg.startsWith('Insufficient') || msg.startsWith('The saved signature') || msg.startsWith('The selected') || msg.startsWith('Treatment details changed')) return res.status(409).json({ error: msg })
     throw err
   }
 })
@@ -970,7 +988,7 @@ clinicalRouter.post('/encounters/:id/doses', requirePage('treatments'), async (r
       const charge = await ensureFollowupCharge(tx, enc, parsed.data.day, parsed.data.date)
       return { ...dose, charge }
     })
-    await audit(req, { module: 'Treatment', action: 'Recorded ' + parsed.data.day + ' · ' + enc.registry + (parsed.data.savedSignatureId?' · saved signer '+parsed.data.savedSignatureId:''), record: enc.registry, branch: servicingBranch(enc) })
+    await audit(req, { module: 'Treatment', action: 'Recorded ' + parsed.data.day + ' · ' + enc.registry, record: enc.registry, branch: servicingBranch(enc), newValue: JSON.stringify({ date: result.created.date, time: result.created.time, dose: result.created.dose, side: result.created.side, brand: result.created.brand, batch: result.created.batch, vaccinator: result.created.vaccinator, animalStatus: result.created.animalStatus }) })
     res.json({
       ...doseClient(result.created),
       line: inventoryClient(result.consumed.line),
@@ -992,6 +1010,10 @@ clinicalRouter.post('/encounters/:id/doses/:day/signature', requireAny('exposure
   if (!req.user!.allBranches && existing.branch !== req.user!.branchName) return res.status(403).json({ error: 'This is not your branch.' })
   const parsed = z.object({ image: z.string().min(1).max(350000), method: z.enum(['pen','upload']), expectedImage: z.string().max(350000).nullable(), reason: z.string().trim().max(500).default('') }).safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ error: 'Enter a valid signature.' })
+  const relatedDoses = await prisma.dose.findMany({ where: { encounterId: { in: [enc.id, enc.continuedFromEncounterId || '', enc.receivingEncounterId || ''].filter(Boolean) } } })
+  const completed = caseInfo(enc, relatedDoses).status === 'Complete'
+  if (completed && !['Admin', 'Superadmin'].includes(req.user!.role)) return res.status(403).json({ error: 'Only Admin or Superadmin can correct a completed treatment.' })
+  if (completed && !parsed.data.reason) return res.status(400).json({ error: 'Enter a reason for correcting a completed treatment.' })
   let signature
   try { signature = readSignature(parsed.data.image, parsed.data.method) } catch { return res.status(400).json({ error: 'Choose a valid signature image.' }) }
   if (!signature) return res.status(400).json({ error: 'Enter a signature.' })
@@ -1003,7 +1025,7 @@ clinicalRouter.post('/encounters/:id/doses/:day/signature', requireAny('exposure
     const changed = await tx.dose.updateMany({ where: { id: existing.id, signature: existing.signature, vaccinator: existing.vaccinator }, data: { signature: signature!.image, signatureMethod: signature!.method, signedAt: time, recordedBy: user.id } })
     if (!changed.count) return null
     if (existing.signature) await tx.signatureCorrection.create({ data: { kind: 'vaccinator', recordId: existing.id, encounterId: enc.id, previousImage: existing.signature, previousSigner: existing.vaccinator, previousMethod: existing.signatureMethod, previousSignedAt: existing.signedAt, previousRecordedBy: existing.recordedBy, newSigner: existing.vaccinator, newMethod: signature!.method, reason: parsed.data.reason, correctedById: user.id, correctedByName: user.name } })
-    await tx.auditLog.create({ data: { userId: user.id, userName: user.name + ' (' + user.role + ')', module: 'Signature', action: existing.signature ? 'Vaccinator signature corrected' : 'Vaccinator signature recorded', record: enc.registry + ' · ' + existing.day, branch: existing.branch, oldValue: '', newValue: existing.signature ? parsed.data.reason : 'Signature recorded', time: clinicDate() + ' · ' + time.toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' }), device: req.userAgent } })
+    await tx.auditLog.create({ data: { userId: user.id, userName: user.name + ' (' + user.role + ')', module: 'Signature', action: existing.signature ? 'Vaccinator signature corrected' : 'Vaccinator signature recorded', record: enc.registry + ' · ' + existing.day, branch: existing.branch, oldValue: existing.signature ? 'Previously signed' : 'Signature pending', newValue: parsed.data.reason || 'Signature recorded', time: clinicDate() + ' · ' + time.toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' }), device: req.userAgent } })
     return tx.dose.findUniqueOrThrow({ where: { id: existing.id } })
   })
   if (!result) return res.status(409).json({ error: 'The signature or vaccinator changed. Reload and try again.' })
@@ -1013,6 +1035,9 @@ clinicalRouter.post('/encounters/:id/doses/:day/signature', requireAny('exposure
 clinicalRouter.patch('/encounters/:id/doses/:day', requirePage('treatments'), async (req, res) => {
   const parsed = doseSchema.omit({ day: true }).safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ error: 'Incomplete dose' })
+  const reasonResult = z.string().trim().max(500).optional().safeParse(req.body.reason)
+  if (!reasonResult.success) return res.status(400).json({ error: 'Enter a valid correction reason.' })
+  const reason = reasonResult.data || ''
   const enc = await prisma.encounter.findUnique({ where: { id: req.params.id } })
   if (!enc) return res.status(404).json({ error: 'Admission not found' })
   if (!inScopeEncounter(req.user!, enc)) return res.status(403).json({ error: 'This is not your branch' })
@@ -1020,6 +1045,11 @@ clinicalRouter.patch('/encounters/:id/doses/:day', requirePage('treatments'), as
   const servicing = servicingBranch(enc)
   const existing = await prisma.dose.findFirst({ where: { encounterId: enc.id, day: req.params.day } })
   if (!existing) return res.status(404).json({ error: 'Dose not found' })
+  const linkedIds = [enc.id, enc.continuedFromEncounterId || '', enc.receivingEncounterId || ''].filter(Boolean)
+  const doses = await prisma.dose.findMany({ where: { encounterId: { in: linkedIds } } })
+  const completed = caseInfo(enc, doses).status === 'Complete'
+  if (completed && !['Admin', 'Superadmin'].includes(req.user!.role)) return res.status(403).json({ error: 'Only Admin or Superadmin can correct a completed treatment.' })
+  if (completed && !reason) return res.status(400).json({ error: 'Enter a reason for correcting a completed treatment.' })
   let newSignature: ReturnType<typeof readSignature> = null
   if (parsed.data.signature || parsed.data.savedSignatureId) {
     if (existing.signature) return res.status(409).json({ error: 'A signature is already recorded. Use the signature replacement controls.' })
@@ -1038,6 +1068,12 @@ clinicalRouter.patch('/encounters/:id/doses/:day', requirePage('treatments'), as
   const delta = newUses - oldUses
   try {
     const result = await prisma.$transaction(async tx => {
+      const currentDoses = await tx.dose.findMany({ where: { encounterId: { in: linkedIds } } })
+      const isComplete = caseInfo(enc, currentDoses).status === 'Complete'
+      if (isComplete && !['Admin', 'Superadmin'].includes(req.user!.role)) throw new Error('Only Admin or Superadmin can correct a completed treatment.')
+      if (isComplete && !reason) throw new Error('Enter a reason for correcting a completed treatment.')
+      const currentDose = currentDoses.find(d => d.id === existing.id)
+      if (!currentDose || ['date', 'time', 'dose', 'side', 'route', 'animalStatus', 'vaccinator', 'batch', 'signature'].some(key => currentDose[key as keyof typeof currentDose] !== existing[key as keyof typeof existing])) throw new Error('The dose changed. Reload and try again.')
       const currentNurse = await resolveVaccinator(tx, servicing, parsed.data.vaccinator)
       if (!currentNurse || currentNurse.name !== parsed.data.vaccinator) throw new Error('The selected vaccinator is no longer available at this branch.')
       if (parsed.data.savedSignatureId) newSignature=await resolveStaffSignature(tx,parsed.data.savedSignatureId,'Nurse',parsed.data.vaccinator,servicing,parsed.data.savedSignatureVersion||'')
@@ -1108,15 +1144,19 @@ clinicalRouter.patch('/encounters/:id/doses/:day', requirePage('treatments'), as
         }
       })
       if (parsed.data.animalStatus) await tx.encounter.update({ where: { id: enc.id }, data: { animalStatus: parsed.data.animalStatus } })
+      const snapshot = (d: typeof existing) => ({ date: d.date, time: d.time, dose: d.dose, side: d.side, route: d.route, animalStatus: d.animalStatus, vaccinator: d.vaccinator, batch: d.batch })
+      await tx.auditLog.create({ data: { userId: req.user!.id, userName: req.user!.name + ' (' + req.user!.role + ')', module: 'Treatment', action: 'Corrected ' + req.params.day, record: enc.registry, branch: servicing, oldValue: JSON.stringify(snapshot(existing)), newValue: JSON.stringify({ ...snapshot(updated), reason: reason || undefined }), time: clinicDate() + ' · ' + new Date().toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' }), device: req.userAgent } })
       return { updated, line, movement }
     })
-    await audit(req, { module: 'Treatment', action: 'Corrected ' + req.params.day + ' · ' + enc.registry, record: enc.registry, branch: servicing })
     res.json({
       ...doseClient(result.updated),
       ...(result.line ? { line: inventoryClient(result.line), movement: movementClient(result.movement!) } : {})
     })
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unable to correct dose'
+    if (msg.startsWith('Only Admin')) return res.status(403).json({ error: msg })
+    if (msg.startsWith('Enter a reason')) return res.status(400).json({ error: msg })
+    if (msg.startsWith('The dose changed')) return res.status(409).json({ error: msg })
     if (msg.startsWith('No usable') || msg.startsWith('Insufficient') || msg.startsWith('Cannot reverse') || msg.startsWith('The signature or vaccinator changed') || msg.startsWith('The saved signature') || msg.startsWith('The selected')) {
       return res.status(409).json({ error: msg })
     }
@@ -1293,6 +1333,9 @@ clinicalRouter.post('/payments', requirePage('payments'), async (req, res) => {
     if (booster && intent === 'collect' && pendings.some(p => isBoosterVaccineLine(p.service) && Number(p.amount) > 0 && p.service === boosterServiceForBrand(enc.brand) && !Number.isInteger(Number(p.amount) / SERVICE_PRICES[p.service]))) throw new Error('Review the existing booster amount before payment.')
     if (addsOtherOnlyServices(requestedLines as Array<{ service?: unknown; qty?: unknown }>, pendings, SERVICE_PRICES)) throw new Error('Record Flu, Hepatitis B and Pneumococcal in Other Treatments.')
     const txn = pendings[0]?.txn || (await tx.payment.findFirst({ where: { encounterId: enc.id, txn: { not: '' } }, orderBy: { createdAt: 'asc' } }))?.txn || await issueTxn(tx, branch, date)
+    if (intent === 'collect' && !free && !booster && enc.brand?.trim().toLowerCase() === 'speeda' && pendings.some(p => p.service === 'Anti-rabies vaccine' && Number(p.amount) > 0)) {
+      throw new Error('This pending bill uses the generic ARV price but the selected brand is Speeda. Review and re-save the RER before collecting.')
+    }
     if (intent === 'collect' && priceInput?.success) {
       if (!enc.rer) throw new Error('Save the RER before collecting. The bill is not ready.')
       const due = pendings.filter(p => Number(p.amount) > 0)
@@ -1462,7 +1505,7 @@ clinicalRouter.post('/payments', requirePage('payments'), async (req, res) => {
     return rows
   }).catch(err => {
     const msg = err instanceof Error ? err.message : 'Unable to save the bill'
-    if (msg.startsWith('Save the RER') || msg.startsWith('Add at least') || msg.startsWith('Record Flu,') || msg.startsWith('Use the ARV charge') || msg.startsWith('Use the follow-up dose payment') || msg.startsWith('Review duplicate ARV') || msg.startsWith('Review the existing ERIG') || msg.startsWith('The booster bill does not match') || msg.startsWith('Review the existing booster amount') || msg.startsWith('The bill changed') || msg.startsWith('Select a valid RER service') || msg.startsWith('Enter a valid price') || msg.startsWith('Enter a reason for the price correction') || msg.startsWith('Use Flu')) return { error: msg }
+    if (msg.startsWith('This pending bill uses the generic ARV price') || msg.startsWith('Save the RER') || msg.startsWith('Add at least') || msg.startsWith('Record Flu,') || msg.startsWith('Use the ARV charge') || msg.startsWith('Use the follow-up dose payment') || msg.startsWith('Review duplicate ARV') || msg.startsWith('Review the existing ERIG') || msg.startsWith('The booster bill does not match') || msg.startsWith('Review the existing booster amount') || msg.startsWith('The bill changed') || msg.startsWith('Select a valid RER service') || msg.startsWith('Enter a valid price') || msg.startsWith('Enter a reason for the price correction') || msg.startsWith('Use Flu')) return { error: msg }
     throw err
   })
   if ('error' in saved) return res.status(400).json(saved)

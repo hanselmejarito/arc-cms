@@ -10,6 +10,13 @@ const client = load('src/data.js', { './timeFormat': load('src/timeFormat.js'), 
 const e = { id: 'test', date: '2026-11-01', biteDate: '2026-11-01', rer: true, died: false, preExp: false, booster: false, category: 'III', pepEligible: true, regimen: 'ID', remark: '', animalStatus: 'Alive' }
 const base = [{ encounterId: 'test', day: 'D0', date: '2026-11-01', animalStatus: 'Alive' }, { encounterId: 'test', day: 'D3', date: '2026-11-04', animalStatus: 'Alive' }, { encounterId: 'test', day: 'D7', date: '2026-11-08', animalStatus: 'Alive' }]
 const optional = { ...e, day14Workflow: 'optional', animalStatus: 'Dead' }
+const clinicalSource = fs.readFileSync('src/screens/Clinical.jsx', 'utf8')
+const helpers = clinicalSource.slice(clinicalSource.indexOf('function displayedDoseDays('), clinicalSource.indexOf("import { OtherTreatmentHistory"))
+const helperJs = ts.transpileModule(helpers, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
+const { doseAdvice } = new Function('protocolOf', 'linkedDoses', 'addDays', 'seriesStart', 'dayLabel', 'fmt', helperJs + '; return { doseAdvice }')(client.protocolOf, client.linkedDoses, client.addDays, client.seriesStart, client.dayLabel, client.fmt)
+assert.equal(doseAdvice(optional, base, 'D14', '2026-11-15'), 'Advised to come back for ' + client.dayLabel.D28 + ' on ' + client.fmt('2026-11-29') + '.')
+assert.equal(doseAdvice(optional, base, 'unknown', '2026-11-15'), 'The next visit requires review.')
+assert.equal(doseAdvice(optional, base, 'D28', '2026-11-29'), 'This completes the series.')
 const patient = { id: 'patient', name: 'Synthetic', birthday: '1990-01-01', sex: 'Male', address: 'Synthetic' }
 for (const engine of [server, client]) {
   assert.equal(engine.protocolOf(optional, base).days.some(([day]) => day === 'D14'), false)
@@ -37,5 +44,8 @@ async function checkStockPath() {
   assert.equal(result.movement.uses, 2)
   assert.equal(stored.length, 1)
   assert.equal(updates, 0, 'No status entered should preserve the previously recorded animal status')
+  await dose.createDoseInTx(tx, { ...optional, branch: 'Guimba', brand: 'Bioshoot', vaccine: 'PVRV', registry: 'TEST' }, { day: 'D14', date: '2026-11-15', time: '09:00', dose: '0.1 mL × 2 sites ID', side: 'L', animalStatus: 'Dead', vaccinator: 'Synthetic', batch: 'batch' }, 'Synthetic', base)
+  assert.equal(stored[1].animalStatus, 'Dead')
+  assert.equal(updates, 1, 'The selected animal status must be saved with the dose')
 }
 checkStockPath().then(() => console.log('Optional and legacy Day 14 protocol and stock path checks passed')).catch(error => { console.error(error); process.exitCode = 1 })

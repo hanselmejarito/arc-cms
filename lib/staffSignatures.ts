@@ -17,5 +17,8 @@ export async function resolveStaffSignature(tx: Prisma.TransactionClient, id: st
 }
 
 export async function auditSavedSignatureUse(tx: Prisma.TransactionClient, actor: { id: string; name: string; role?: string }, signerId: string, record: string, branch: string, device = '') {
-  await tx.auditLog.create({data:{userId:actor.id,userName:actor.role?actor.name+' ('+actor.role+')':actor.name,module:'Signature',action:'Saved staff signature used',record,branch,oldValue:'',newValue:'Saved signer '+signerId,time:new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Manila'}),device}})
+  const signer = await tx.staffSignature.findUnique({ where: { id: signerId }, select: { name: true, kind: true } })
+  const now = new Date()
+  const time = now.toLocaleDateString('en-CA', { timeZone: 'Asia/Manila' }) + ' · ' + now.toLocaleTimeString('en-PH', { timeZone: 'Asia/Manila', hour: '2-digit', minute: '2-digit' })
+  await tx.auditLog.create({data:{userId:actor.id,userName:actor.role?actor.name+' ('+actor.role+')':actor.name,module:'Signature',action:'Saved staff signature used',record,branch,oldValue:'',newValue:signer ? `Signer: ${signer.name} (${signer.kind}) · ID: ${signerId}` : 'Saved signer '+signerId,time,device}})
 }

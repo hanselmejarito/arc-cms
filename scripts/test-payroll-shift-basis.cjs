@@ -10,9 +10,10 @@ function load(file, deps = {}) {
 }
 const basis = load('src/payrollBasis.js')
 const shifts = load('lib/shiftPreview.ts')
-const data = load('src/data.js', { '../lib/shiftPreview': shifts })
+const timeFormat = load('src/timeFormat.js')
+const data = load('src/data.js', { '../lib/shiftPreview': shifts, './timeFormat': timeFormat })
 const people = load('src/screens/People.jsx', {
-  '../data': data, '../payrollBasis': basis, '../api': {}, '../components': {}, './HrPrint': {}, '../StaffSignatures': {}, '../BranchCorrection': {}
+  '../data': data, '../timeFormat': timeFormat, '../payrollEligibility': load('src/payrollEligibility.js'), '../payrollBasis': basis, '../api': {}, '../components': {}, './HrPrint': {}, '../StaffSignatures': {}, '../BranchCorrection': {}
 })
 const e = { id: 'E', role: 'Nurse', branch: 'Guimba', shift: 'Morning Shift', rate: 840, hours: 6, benefits: false }
 const row = (date, extra) => ({ employeeId: 'E', branch: 'Guimba', date, ...extra })
@@ -23,6 +24,17 @@ const input = data.periodInputsFromAttendance(e, period.id, [
   row('2026-11-14', { in: '07:30', out: '16:00', nightIn: '16:10', nightOut: '23:00' })
 ])
 const result = people.calc(e, input)
+const alternating = { ...e, shift: 'Morning/Night' }
+const alternatingInput = data.periodInputsFromAttendance(alternating, period.id, [
+  row('2026-11-13', { in: '07:00', out: '16:00' }),
+  row('2026-11-14', { nightIn: '16:00', nightOut: '23:00' })
+])
+const alternatingPay = people.calc(alternating, alternatingInput)
+assert.equal(alternatingInput.days, 1)
+assert.equal(alternatingPay.calendarDays, 2)
+assert.equal(alternatingPay.nightShiftDays, 1)
+assert.equal(alternatingPay.basic, 1680)
+assert.equal(alternatingPay.nightPay, 840 / 7 * 0.1)
 assert.ok(Math.abs(result.lateDed - (840 / 6 / 60 * 30 + 840 / 8 / 60 * 10 + 840 / 7 / 60 * 10)) < 0.0001)
 assert.equal(result.nightShiftDays, 1)
 assert.equal(input.nightShiftMinutes, 60)
@@ -86,7 +98,7 @@ assert.ok(Math.abs(allocated.rows.reduce((sum,x)=>sum+x.pay.net,0)-total.net)<0.
 assert.equal(branchPayroll.branchPayrollRows({employee:e,periodId:period.id,attendance:splitAttendance,users:[],overtimeRequests:[],total,calculate:people.calc,hasManualAdjustment:true}).needsReview,true)
 assert.equal(branchPayroll.branchPayrollRows({employee:e,periodId:period.id,attendance:splitAttendance.map(r=>({...r,homeBranchAtMorning:null})),users:[],overtimeRequests:[],total,calculate:people.calc}).needsReview,true)
 assert.equal(branchPayroll.branchPayrollRows({employee:{...e,rate:900},periodId:period.id,attendance:splitAttendance,users:[],overtimeRequests:[],total,calculate:people.calc}).needsReview,true)
-const summaryModule=load('src/branchPayrollSummary.js',{'./dutyAllocation':allocator,'./branchPayroll':branchPayroll,'./data':data})
+const summaryModule=load('src/branchPayrollSummary.js',{'./dutyAllocation':allocator,'./branchPayroll':branchPayroll,'./data':data,'./payrollEligibility':load('src/payrollEligibility.js')})
 const reportArgs={branches:['Guimba','Paniqui'],employees:[{...e,payroll:true}],attendance:splitAttendance,users:[],payrollInputs:[],contributionOverrides:[],overtimeRequests:[],periodId:period.id,calculate:people.calc}
 const report=summaryModule.branchPayrollSummary(reportArgs)
 const reportTotal=people.calc(e,data.periodInputsFromAttendance(e,period.id,splitAttendance,[],[]),{},1,undefined,{payday:period.half})

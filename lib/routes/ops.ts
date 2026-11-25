@@ -743,7 +743,7 @@ const employeeSchema = z.object({
   workArrangement: z.enum(['', 'Full-time', 'Part-time']).optional(),
   rate: z.coerce.number().positive(),
   hours: z.coerce.number().positive().optional().default(8),
-  shift: z.enum(['Morning Shift', 'Night Shift']).optional().default('Morning Shift'),
+  shift: z.enum(['Morning Shift', 'Morning/Night', 'Night Shift']).optional().default('Morning Shift'),
   status: z.enum(['Active', 'Inactive']).optional().default('Active'),
   officer: z.boolean().optional().default(false),
   payroll: z.boolean().optional().default(true),

@@ -8,7 +8,7 @@ function load(path,deps={}) {
 }
 const data=load('src/data.js',{'../lib/shiftPreview':load('lib/shiftPreview.ts'),'./timeFormat':load('src/timeFormat.js')})
 const people=fs.readFileSync('src/screens/People.jsx','utf8')
-const calcSource=people.slice(people.indexOf('export function calc('),people.indexOf('\n\nexport function EmployeesPage'))
+const calcSource=people.slice(people.indexOf('export function calc('),people.indexOf('export function EmployeesPage'))
 const calcJs=ts.transpileModule(calcSource,{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText
 const exportsCalc={}
 new Function('exports','nightOf','statutoryCutoff','applyContribution','shiftMinuteDeduction',calcJs)(exportsCalc,()=>true,()=>({}),x=>x,load('src/payrollBasis.js').shiftMinuteDeduction)
