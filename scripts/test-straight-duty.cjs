@@ -26,5 +26,7 @@ r=calc({...full,date:'2026-11-15',nightIn:'16:20',nightOut:'22:30'});assert.equa
 r=calc({...full,nightOut:'22:30'});assert.equal(r.input.nightUndertime,30);assert.equal(r.input.nightShiftMinutes,30)
 r=calc({...full,in:'',out:''});assert.equal(r.input.calendarDays,1);assert.equal(r.pay.basic,850)
 r=calc({...full,nightOut:''});assert(r.input.needsReview.some(x=>x.includes('night')))
-r=calc({...full,nightOut:'23:01'});assert(r.input.needsReview.some(x=>x.includes('night overtime')))
+r=calc({...full,nightOut:'23:01'});assert(r.input.needsReview.some(x=>x.includes('night overtime')), 'Before the policy start, overtime still requires review')
+for(const out of ['23:00','23:06','23:15']){r=calc({...full,date:'2026-11-25',nightOut:out});assert(!r.input.needsReview.some(x=>x.includes('night overtime')),out+' is within the 15-minute window');assert.equal(r.input.ot,0)}
+r=calc({...full,date:'2026-11-25',nightOut:'23:16'});assert(r.input.needsReview.some(x=>x.includes('night overtime')), 'After the window, overtime still requires review')
 console.log('Straight duty, night-only, late, undertime, differential, incomplete and overtime review: PASS')

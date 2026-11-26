@@ -309,7 +309,7 @@ export function periodInputsFromAttendance(e,periodId,attendance=[],users=[],ove
   }
   if(r.nightIn){
    if(!r.nightOut){needsReview.push(r.date+' (night)')}else{
-    try{const nw=dutyHours(r.roleAtNight||e.role,'Night Shift',r.nightBranch||r.branch||e.branch,r.date,branchConfig);if(nw.enabled===false)throw Error('Night duty disabled');if(toMins(r.nightOut)>toMins(nw.end))needsReview.push(r.date+' (night overtime)');const n=previewNightPay({dailyRateCentavos:70000,clockIn:r.nightIn,clockOut:r.nightOut,nightDifferentialRate:0,scheduledStart:nw.start,scheduledEnd:nw.end});const rawNightLate=Math.max(0,Math.min(420,toMins(r.nightIn)-toMins(nw.start)));nightShiftDays++;nightShiftMinutes+=n.nightMinutes;nightLate+=Math.max(0,rawNightLate-(r.date>='2026-11-15'?20:0));nightUndertime+=Math.max(0,n.missedMinutes-rawNightLate)}catch{needsReview.push(r.date+' (night)')}
+    try{const nw=dutyHours(r.roleAtNight||e.role,'Night Shift',r.nightBranch||r.branch||e.branch,r.date,branchConfig);if(nw.enabled===false)throw Error('Night duty disabled');if(overtimeRoom(r.roleAtNight||e.role,'Night Shift',r.nightOut,r.nightBranch||r.branch||e.branch,r.date,branchConfig)>0)needsReview.push(r.date+' (night overtime)');const n=previewNightPay({dailyRateCentavos:70000,clockIn:r.nightIn,clockOut:r.nightOut,nightDifferentialRate:0,scheduledStart:nw.start,scheduledEnd:nw.end});const rawNightLate=Math.max(0,Math.min(420,toMins(r.nightIn)-toMins(nw.start)));nightShiftDays++;nightShiftMinutes+=n.nightMinutes;nightLate+=Math.max(0,rawNightLate-(r.date>='2026-11-15'?20:0));nightUndertime+=Math.max(0,n.missedMinutes-rawNightLate)}catch{needsReview.push(r.date+' (night)')}
    }
   }
   if(r.date>='2026-11-14'){
