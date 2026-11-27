@@ -547,3 +547,5 @@ html.print-admission .soap-signature-overlay{max-width:30mm;max-height:16mm}
 @media print{.payslip-screen-note{display:none!important}}
 
 .payslip-sheet + .payslip-sheet{margin-top:20px}@media print{.payslip-sheet + .payslip-sheet{margin-top:0;break-before:page;page-break-before:always}.payslip-sheet{break-inside:avoid;page-break-inside:avoid}}
+
+.dose-choice-layout{display:grid;grid-template-columns:minmax(0,1fr) 150px;gap:16px;align-items:start}.dose-choice-layout>div{min-width:0}.dose-choice-layout .card-note{margin-top:8px}@media(max-width:550px){.dose-choice-layout{grid-template-columns:1fr}}

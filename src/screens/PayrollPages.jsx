@@ -298,14 +298,14 @@ export function PayslipsPage({
       {current.auto.needsReview?.length>0&&<div className="notice-line" role="alert">Attendance on {current.auto.needsReview.join(', ')} requires Admin attendance review. Amounts may be incomplete.</div>}
       {temporaryBranchEnabled&&<div className="notice-line">Each payslip shows duties for one branch. Cutoff deductions are applied once to the home branch.</div>}
       <div className="payslip-select">
-        {listAll && <Field label="Select employee" value={employee.id} options={visible.map(e => [e.id, e.name + ' · ' + e.branch])} onChange={e => setId(e.target.value)} />}
+        {listAll && <Field label="Select employee" placeholder="Select employee" value={employee.id} options={visible.map(e => [e.id, e.name + ' · Home: ' + e.branch])} onChange={e => setId(e.target.value)} />}
         <Field label="Payroll period" value={period} options={payPeriods.map(p => [p.id, p.label])} onChange={e => setPeriod(e.target.value)} />
         <span>Cutoff: {fmt(P.cutoff)} · Pay date: {fmt(P.pay)} · {current.stored ? 'Updated' : 'Auto from Time In'}</span>
       </div>
       {payslipNeedsReview&&<div className="notice-line" role="alert">This payroll requires Admin review before the payslip can be shown or printed.{allocationCheck?.reason?' '+allocationCheck.reason:''}</div>}
       {!payslipNeedsReview&&!branchRows.length&&<div className="notice-line">No payslip is available for this branch in the selected cutoff.</div>}
       {!payslipNeedsReview&&branchRows.map(chosenRow=>{const c=chosenRow.pay;return <div className="payslip-sheet" key={chosenRow.branch}>
-        <div className="payslip-brand"><div className="brand-mark"><BrandLogo branch={chosenRow.branch} /></div><div><strong>{clinicName(chosenRow.branch,'ARC')}</strong><span>EMPLOYEE PAYSLIP</span></div><small>{fmt(P.pay)}</small></div>
+        <div className="payslip-brand"><div className="brand-mark"><BrandLogo branch={chosenRow.branch} /></div><div><strong>{clinicName(chosenRow.branch)}</strong><span>EMPLOYEE PAYSLIP</span></div><small>{fmt(P.pay)}</small></div>
         <div className="payslip-info">
           <div><small>EMPLOYEE</small><strong>{employee.name}</strong><span>{[employee.referenceNumber?.trim() && 'Employee ID: ' + employee.referenceNumber.trim(), employee.position].filter(Boolean).join(' · ')}</span></div>
           <div><small>BRANCH</small><strong>{chosenRow.branch}</strong><span>{employee.shift}</span></div>
