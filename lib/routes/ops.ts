@@ -7,6 +7,7 @@ import { audit } from '../audit.js'
 import { canAccessBranch, hashPassword, requireAny, requireAuth, requirePage, type AuthedUser } from '../auth.js'
 import { ALL_BRANCH_ROLES, canPage, clinicDate, clinicTime, refundEligible, refundRemaining } from '../clinical.js'
 import { nextId } from '../ids.js'
+import { issueRefundReference } from '../registry.js'
 import { catchUpBranch, closeShiftOnce } from '../shiftClose.js'
 import { readSignature } from '../signatureInput.js'
 import { nursesByDuty } from '../nurseDuty.js'
@@ -336,7 +337,7 @@ const adjustSchema = z.object({
   reason: z.enum(ADJUST_REASONS),
   direction: z.enum(['Increase', 'Decrease']).optional().default('Decrease'),
   to: z.string().optional().default(''),
-  remark: z.string().min(1, 'A reason / remark is required for adjustments'),
+  remark: z.string().trim().min(1, 'A reason / remark is required for adjustments'),
   signature: z.string().optional().default('')
 })
 
@@ -349,9 +350,10 @@ opsRouter.post('/inventory/adjust', requirePage('adjustments'), async (req, res)
   const branchRow = storedBranch ? {...storedBranch,night:await branchNightAt(prisma,storedBranch,form.date)} : null
   if (branchRow && !branchRow.night) form.shift = 'MS'
   const existing = await prisma.inventoryLine.findMany({ where: { item: form.item, branch: form.branch } })
-  const line = existing.find(x => x.id === form.line) || existing[0]
-  if (!line) return deny(res, 'No stock line for this item at ' + form.branch, 400)
-  const decrease = form.direction === 'Decrease' || form.reason === 'Transfer to other branch'
+  const line = existing.find(x => x.id === form.line)
+  if (!line) return deny(res, 'Select a valid batch for this item and branch.', 400)
+  if (form.reason === 'Expired' && line.expiry >= clinicDate()) return deny(res, 'This batch is not yet expired.', 400)
+  const decrease = form.reason !== 'Correction' || form.direction === 'Decrease'
   if (decrease && form.quantity > line.stock) return deny(res, 'Insufficient stock on hand (' + line.stock + ')', 409)
   if (form.reason === 'Transfer to other branch') {
     if (!form.to || form.to === form.branch) return deny(res, 'Receiving branch is required', 400)
@@ -364,10 +366,12 @@ opsRouter.post('/inventory/adjust', requirePage('adjustments'), async (req, res)
       form.date = open.date
       form.shift = branchRow?.night && open.shift === 'NS' ? 'NS' : 'MS'
     }
-    const source = await tx.inventoryLine.update({
-      where: { id: line.id },
-      data: { stock: line.stock + (decrease ? -form.quantity : form.quantity), ...(branchRow && !branchRow.night ? { shift: 'MS' as const } : {}) }
+    const changed = await tx.inventoryLine.updateMany({
+      where: { id: line.id, ...(decrease ? { stock: { gte: form.quantity } } : {}) },
+      data: { stock: { increment: decrease ? -form.quantity : form.quantity }, ...(branchRow && !branchRow.night ? { shift: 'MS' as const } : {}) }
     })
+    if (!changed.count) return null
+    const source = await tx.inventoryLine.findUniqueOrThrow({ where: { id: line.id } })
     const lines = [source]
     const movements: Movement[] = []
     let received: ReceivedRow | null = null
@@ -461,12 +465,13 @@ opsRouter.post('/inventory/adjust', requirePage('adjustments'), async (req, res)
     }
     return { lines, movements, received }
   })
+  if (!result) return deny(res, 'Stock changed or is insufficient. Refresh and try again.', 409)
   await audit(req, {
     module: 'Inventory',
     action: 'Stock adjustment · ' + form.reason,
     record: line.item + ' ' + line.batch,
     branch: line.branch,
-    oldValue: String(line.stock),
+    oldValue: String(result.lines[0].stock + (decrease ? form.quantity : -form.quantity)),
     newValue: String(result.lines[0].stock)
   })
   res.json({
@@ -552,9 +557,60 @@ const refundSchema = z.object({
   requested: dateStr.optional()
 })
 
+// A referral refund batch is atomic: one refund is recorded per paid transaction.
+const referralRefundSchema = z.object({
+  encounterId: z.string().min(1), payments: z.array(z.string().min(1)).min(1).max(100),
+  reason: z.string().trim().min(1).max(500)
+}).strict()
+opsRouter.post('/refunds/referral-batch', requirePage('refunds'), async (req, res) => {
+  const parsed = referralRefundSchema.safeParse(req.body)
+  if (!parsed.success) return deny(res, 'Select at least one transaction and enter a reason.', 400)
+  const { encounterId, payments, reason } = parsed.data
+  if (new Set(payments).size !== payments.length) return deny(res, 'Duplicate transactions are not allowed.', 400)
+  try {
+    const result = await prisma.$transaction(async tx => {
+      const referral = await tx.referral.findFirst({ where: { encounterId, status: 'Accepted' } })
+      if (!referral || !scopeBranch(req.user!, referral.from)) throw new Error('An accepted referral at the original paying branch is required.')
+      const selected = await tx.payment.findMany({ where: { id: { in: payments }, encounterId, branch: referral.from, status: 'Paid' } })
+      if (selected.length !== payments.length) throw new Error('One or more payments are unavailable at this branch.')
+      const keys = selected.map(p => p.txn || p.id)
+      if (new Set(keys).size !== keys.length) throw new Error('Select each transaction only once.')
+      for (const key of [...keys].sort()) await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'referral-refund:' + key}))`
+      const allPaid = await tx.payment.findMany({ where: { encounterId, branch: referral.from, status: 'Paid' } })
+      const oldRefunds = await tx.refund.findMany({ where: { payment: { in: allPaid.map(p=>p.id) }, NOT: { status: 'Rejected' } } })
+      // Legacy referrals sometimes recorded multiple transaction totals against a single one.
+      for (const refund of oldRefunds) {
+        const source = allPaid.find(p=>p.id===refund.payment)
+        if (!source) continue
+        const group = allPaid.filter(p=>source.txn ? p.txn===source.txn : p.id===source.id)
+        const cap = group.reduce((sum,p)=>sum+Math.round(Number(p.amount)*100),0)
+        if (Math.round(Number(refund.amount)*100)>cap) throw new Error('An older combined refund needs administrator review before another request.')
+      }
+      const created: Refund[] = []
+      for (const p of selected) {
+        const group = allPaid.filter(x=>p.txn ? x.txn===p.txn : x.id===p.id)
+        const ids = group.map(x=>x.id)
+        const cap = group.reduce((sum,x)=>sum+Math.round(Number(x.amount)*100),0)
+        const used = oldRefunds.filter(x=>ids.includes(x.payment)).reduce((sum,x)=>sum+Math.round(Number(x.amount)*100),0)
+        const remaining = cap-used
+        if (remaining<=0) throw new Error('A selected transaction has already been fully requested or refunded.')
+        const row = await tx.refund.create({ data: { id:'RFD-'+randomUUID(), reference:await issueRefundReference(tx,p.branch,clinicDate()), patient:p.patient, payment:p.id, branch:p.branch, amount:remaining/100, reason, requested:clinicDate(), status:'Pending' } })
+        await tx.auditLog.create({ data: { userId:req.user!.id, userName:req.user!.name+' ('+req.user!.role+')', module:'Refund', action:'Referral refund requested', record:row.id, branch:p.branch, oldValue:p.txn||p.id, newValue:String(row.amount), time:clinicDate()+' · '+clinicTime(), device:req.userAgent } })
+        created.push(row)
+      }
+      return created
+    })
+    return res.json({ refunds: result.map(refundClient) })
+  } catch (err) {
+    if (err instanceof Error) return deny(res, err.message, 409)
+    throw err
+  }
+})
+
 opsRouter.post('/refunds', requirePage('refunds'), async (req, res) => {
   const parsed = refundSchema.safeParse(req.body)
   if (!parsed.success) return deny(res, 'Select a payment and enter an amount', 400)
+  if (!Number.isSafeInteger(Math.round(parsed.data.amount * 100)) || Math.abs(parsed.data.amount * 100 - Math.round(parsed.data.amount * 100)) > 0.000001) return deny(res, 'Enter an amount with at most two decimal places.', 400)
   if (parsed.data.payment.startsWith('OTP-')) {
     const otherPay = await prisma.otherTreatmentPayment.findUnique({
       where: { id: parsed.data.payment }, include: { treatment: { include: { patient: { select: { name: true } } } } }
@@ -572,7 +628,7 @@ opsRouter.post('/refunds', requirePage('refunds'), async (req, res) => {
       const used = refunds.reduce((sum, x) => sum + Math.round(Number(x.amount) * 100), 0)
       if (requestedCents > otherPay.amountCentavos - used) return null
       const created = await tx.refund.create({ data: {
-        id: 'RFO-' + randomUUID(), patient: treatment.patient.name, payment: otherPay.id,
+        id: 'RFO-' + randomUUID(), reference:await issueRefundReference(tx,treatment.branch,parsed.data.requested || clinicDate()), patient: treatment.patient.name, payment: otherPay.id,
         branch: treatment.branch, amount: requestedCents / 100, reason: parsed.data.reason,
         requested: parsed.data.requested || clinicDate(), status: 'Pending'
       } })
@@ -586,42 +642,32 @@ opsRouter.post('/refunds', requirePage('refunds'), async (req, res) => {
     if (!result) return deny(res, 'Refund exceeds the remaining payment amount.', 409)
     return res.json(refundClient(result))
   }
-  const pay = await prisma.payment.findUnique({ where: { id: parsed.data.payment } })
-  if (!pay || pay.status !== 'Paid') return deny(res, 'Select a payment and enter an amount', 400)
-  if (!scopeBranch(req.user!, pay.branch)) return deny(res, 'This is not your branch')
-  const siblings = pay.txn
-    ? await prisma.payment.findMany({ where: { txn: pay.txn, status: 'Paid' } })
-    : [pay]
-  const cap = siblings.reduce((s, p) => s + Number(p.amount || 0), 0)
-  const existing = await prisma.refund.findMany({
-    where: { payment: { in: siblings.map(p => p.id) }, NOT: { status: 'Rejected' } }
-  })
-  const remaining = refundRemaining(cap, existing, siblings.map(p => p.id))
-  if (remaining <= 0) return deny(res, 'This payment already has a refund', 409)
-  if (parsed.data.amount > remaining) return deny(res, 'Refund cannot exceed the remaining amount', 400)
-  const enc = await prisma.encounter.findUnique({ where: { id: pay.encounterId } })
-  if (enc) {
-    const doses = await prisma.dose.findMany({
-      where: { encounterId: { in: [enc.id, enc.continuedFromEncounterId || '', enc.receivingEncounterId || ''].filter(Boolean) } }
+  try {
+    const created = await prisma.$transaction(async tx => {
+      const pay = await tx.payment.findUnique({ where: { id: parsed.data.payment } })
+      if (!pay || pay.status !== 'Paid') throw new Error('Select a paid payment.')
+      if (!scopeBranch(req.user!, pay.branch)) throw new Error('This is not your branch.')
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'referral-refund:' + (pay.txn || pay.id)}))`
+      if (await tx.referral.findFirst({ where: { encounterId: pay.encounterId, from: pay.branch, status: 'Accepted' } })) throw new Error('Use Request referral refund for an accepted referral.')
+      const siblings = pay.txn ? await tx.payment.findMany({ where: { txn: pay.txn, status: 'Paid' } }) : [pay]
+      const cap = siblings.reduce((sum, p) => sum + Number(p.amount || 0), 0)
+      const existing = await tx.refund.findMany({ where: { payment: { in: siblings.map(p=>p.id) }, NOT: { status:'Rejected' } } })
+      const remaining = refundRemaining(cap, existing, siblings.map(p=>p.id))
+      if (remaining <= 0 || parsed.data.amount > remaining) throw new Error('Refund cannot exceed the remaining amount.')
+      const enc = await tx.encounter.findUnique({ where: { id: pay.encounterId } })
+      if (enc) {
+        const doses = await tx.dose.findMany({ where: { encounterId: { in: [enc.id, enc.continuedFromEncounterId || '', enc.receivingEncounterId || ''].filter(Boolean) } } })
+        if (!refundEligible(enc, doses)) throw new Error('Refund window closed · allowed only until the scheduled Day 7')
+      }
+      const row = await tx.refund.create({ data: { id:'RFD-'+randomUUID(), reference:await issueRefundReference(tx,pay.branch,parsed.data.requested || clinicDate()), patient:pay.patient, payment:pay.id, branch:pay.branch, amount:parsed.data.amount, reason:parsed.data.reason, requested:parsed.data.requested || clinicDate(), status:'Pending' } })
+      await tx.auditLog.create({ data: { userId:req.user!.id, userName:req.user!.name+' ('+req.user!.role+')', module:'Refund', action:'Refund requested at original paying branch', record:row.id, branch:pay.branch, time:clinicDate()+' · '+clinicTime(), device:req.userAgent } })
+      return row
     })
-    if (!refundEligible(enc, doses)) {
-      return deny(res, 'Refund window closed · allowed only until the scheduled Day 7', 409)
-    }
+    return res.json(refundClient(created))
+  } catch (err) {
+    if (err instanceof Error) return deny(res, err.message, 409)
+    throw err
   }
-  const created = await prisma.refund.create({
-    data: {
-      id: await nextId(prisma.refund, 'RFD-', 3),
-      patient: pay.patient,
-      payment: pay.id,
-      branch: pay.branch,
-      amount: parsed.data.amount,
-      reason: parsed.data.reason,
-      requested: parsed.data.requested || clinicDate(),
-      status: 'Pending'
-    }
-  })
-  await audit(req, { module: 'Refund', action: 'Refund requested at original paying branch', record: created.id, branch: pay.branch })
-  res.json(refundClient(created))
 })
 
 opsRouter.post('/refunds/:id/status', requirePage('refunds'), async (req, res) => {
@@ -1319,7 +1365,7 @@ opsRouter.post('/attendance/correct-branch', requireAny('attendance'), async (re
       const data = f.shift === 'morning' ? { branch: f.branch, corrected: true, reviewedBreakMinutes: null, breakReviewedAt: null, breakReviewedBy: null } : { nightBranch: f.branch, corrected: true }
       const changed = await tx.attendance.updateMany({ where, data })
       if (!changed.count) throw new Error('Attendance changed. Reload and try again.')
-      const entry = await tx.auditLog.create({ data: { userId: req.user!.id, userName: req.user!.name + ' (' + req.user!.role + ')', module: 'Attendance', action: 'Attendance correction', record: f.date + ' · ' + (f.shift === 'morning' ? 'Morning branch' : 'Night branch'), oldValue: original, newValue: f.branch + ' · ' + f.reason, branch: f.branch, time: clinicDate() + ' · ' + clinicTime(), device: req.userAgent } })
+      const entry = await tx.auditLog.create({ data: { userId: req.user!.id, userName: req.user!.name + ' (' + req.user!.role + ')', module: 'Attendance', action: 'Attendance correction', record: f.date + ' · ' + (f.shift === 'morning' ? 'Morning branch' : 'Night branch') + ' · ' + row.user.name, oldValue: original, newValue: f.branch + ' · ' + f.reason, branch: f.branch, time: clinicDate() + ' · ' + clinicTime(), device: req.userAgent } })
       return { attendance: await tx.attendance.findUniqueOrThrow({ where: { id: row.id } }), entry }
     })
     return res.json({ attendance: attendanceClient({ ...saved.attendance, user: row.user }), correction: attendanceCorrectionClient(saved.entry) })
@@ -1336,8 +1382,10 @@ opsRouter.post('/attendance/correct', requireAny('attendance'), async (req, res)
   const targetId = parsed.data.userId || req.user!.id
   const k = parsed.data.field === 'Time In' ? 'clockIn' : parsed.data.field === 'Time Out' ? 'clockOut' : parsed.data.field === 'Night Time In' ? 'nightClockIn' : 'nightClockOut'
   const row = await prisma.attendance.findUnique({ where: { userId_date: { userId: targetId, date: parsed.data.date } } })
-  if (k.startsWith('night') && (!row || !['Guimba', 'Cabanatuan'].includes(row.branch))) return deny(res, 'A Guimba or Cabanatuan attendance record is required.', 400)
-  if (row && !req.user!.allBranches && row.branch !== req.user!.branchName) return deny(res, 'This is not your branch.', 403)
+  const nightCorrection = k.startsWith('night')
+  const dutyBranch = nightCorrection && process.env.TEMPORARY_BRANCH_ENABLED === 'true' ? (row?.nightBranch || row?.branch) : row?.branch
+  if (nightCorrection && (!row || (process.env.TEMPORARY_BRANCH_ENABLED === 'true' ? !row.nightClockIn : !['Guimba', 'Cabanatuan'].includes(row.branch)))) return deny(res, 'A recorded night duty is required before correcting night attendance.', 400)
+  if (row && !req.user!.allBranches && dutyBranch !== req.user!.branchName) return deny(res, 'This is not your branch.', 403)
   if (k.startsWith('night') && !/^([01]\d|2[0-3]):[0-5]\d$/.test(parsed.data.updated)) return deny(res, 'Enter a valid time.', 400)
   if (row && k === 'nightClockIn' && row.nightClockOut && parsed.data.updated >= row.nightClockOut) return deny(res, 'Night Time In must be before Night Time Out.', 400)
   if (row && k === 'nightClockOut' && (!row.nightClockIn || parsed.data.updated <= row.nightClockIn)) return deny(res, 'Night Time Out must be after Night Time In.', 400)
@@ -1363,15 +1411,15 @@ opsRouter.post('/attendance/correct', requireAny('attendance'), async (req, res)
         corrected: true
       }
     })
+  const target = await prisma.user.findUnique({ where: { id: targetId } })
   const entry = await audit(req, {
     module: 'Attendance',
     action: 'Attendance correction',
-    record: parsed.data.date + ' · ' + parsed.data.field,
+    record: parsed.data.date + ' · ' + parsed.data.field + ' · ' + (target?.name || 'Unknown staff'),
     oldValue: original,
     newValue: parsed.data.updated + ' · ' + parsed.data.reason,
-    branch: saved.branch
+    branch: nightCorrection && process.env.TEMPORARY_BRANCH_ENABLED === 'true' ? (saved.nightBranch || saved.branch) : saved.branch
   })
-  const target = await prisma.user.findUnique({ where: { id: targetId } })
   res.json({
     attendance: attendanceClient({ ...saved, user: { employeeId: target?.employeeId || null, name: target?.name || req.user!.name } }),
     correction: attendanceCorrectionClient(entry)

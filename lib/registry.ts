@@ -50,6 +50,16 @@ export async function issueTxn(tx: Tx, branchName: string, date: string) {
   return prefix + pad(max + 1, 4)
 }
 
+export async function issueRefundReference(tx: Tx, branchName: string, date: string) {
+  const code = BRANCH_CODES[branchName]
+  if (!code) throw new Error('Confirm the branch code before issuing a refund reference.')
+  const year = date.slice(2,4), prefix = `RFD${code}-${year}-`
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'refund-ref:' + branchName + ':' + year}))`
+  const rows = await tx.refund.findMany({ where: { reference: { startsWith: prefix } }, select: { reference:true } })
+  const max = rows.reduce((n,r)=>Math.max(n,Number(r.reference?.slice(prefix.length))||0),0)
+  return prefix + pad(max+1,4)
+}
+
 export async function peekRegistry(tx: Tx, branchName: string, date: string) {
   const code = BRANCH_CODES[branchName]
   if (!code) return ''

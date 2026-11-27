@@ -1,0 +1,1 @@
+ALTER TABLE "Encounter" ADD COLUMN "bodyView" TEXT NOT NULL DEFAULT '';

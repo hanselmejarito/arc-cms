@@ -222,6 +222,14 @@ html.print-admission .soap-paper .arc-box{width:11px;height:11px}
 .registry-head .report-logo-right{right:max(0px,calc(50% - 390px))}
 .doh-print-parts{display:none}
 .registry-print-parts{display:none}
+.patient-search-field{position:relative}
+.patient-search-field>label{font-size:12px;color:#5a7677;font-weight:800}
+.patient-search-field>label span{color:#d2685c}
+.patient-search-results{position:absolute;z-index:20;top:100%;left:0;right:0;max-height:220px;overflow-y:auto;background:#fff;border:1px solid #dfe8e8;border-radius:7px;box-shadow:0 8px 24px rgb(10 22 40 / 15%)}
+.patient-search-results button{display:block;width:100%;padding:10px;text-align:left;border:0;background:transparent;color:#2c5354;font-size:13px;cursor:pointer}
+.patient-search-results button.active,.patient-search-results button:hover{background:#e7f5f2}
+.patient-search-empty{padding:10px;color:#617d7d;font-size:13px}
+@media screen{:root[data-theme=dark] .patient-search-results{background:#172238;border-color:#334155}:root[data-theme=dark] .patient-search-results button{color:#e6ebf2}:root[data-theme=dark] .patient-search-results button.active,:root[data-theme=dark] .patient-search-results button:hover{background:#304155}}
 @media print{
  html.print-registry .registry-sheet,html.print-registry .form-sheet.registry-sheet{display:none!important}
  html.print-registry .registry-print-parts{display:block;color:#111;background:#fff;margin-left:6mm;margin-right:2mm}
@@ -236,7 +244,7 @@ html.print-admission .soap-paper .arc-box{width:11px;height:11px}
  html.print-registry .registry-print-table th,html.print-registry .registry-print-table td{border:1px solid #333;padding:2px;vertical-align:top;white-space:normal;word-break:normal;overflow-wrap:anywhere;line-height:1.2;color:#111}
  html.print-registry .registry-print-table thead th{background:#e5f1ef!important;text-align:center;vertical-align:middle;-webkit-print-color-adjust:exact;print-color-adjust:exact}
  html.print-registry .registry-print-table tbody td{text-align:center}
- html.print-registry .registry-print-table-0 tbody td:nth-child(3),html.print-registry .registry-print-table-0 tbody td:nth-child(5),html.print-registry .registry-print-table-0 tbody td:nth-child(9),html.print-registry .registry-print-table-1 tbody td:nth-child(2),html.print-registry .registry-print-table-1 tbody td:last-child{text-align:left}
+ html.print-registry .registry-print-table-0 tbody td:nth-child(3),html.print-registry .registry-print-table-0 tbody td:nth-child(5),html.print-registry .registry-print-table-0 tbody td:nth-child(9),html.print-registry .registry-print-table-1 tbody td:last-child{text-align:left}
  html.print-registry .registry-print-table tr{break-inside:avoid;page-break-inside:avoid}
  html.print-doh .doh-sheet,html.print-doh .form-sheet.doh-sheet{display:none!important}
  html.print-doh .doh-print-parts{display:block;color:#111;background:#fff}
@@ -254,7 +262,7 @@ html.print-admission .soap-paper .arc-box{width:11px;height:11px}
  html.print-doh .doh-part-table tr{break-inside:avoid;page-break-inside:avoid}
  html.print-doh .doh-part-table th,html.print-doh .doh-part-table td{border:1px solid #333;padding:2px;vertical-align:top;white-space:normal;overflow-wrap:anywhere;text-align:center;color:#111!important;letter-spacing:normal}
  html.print-doh .doh-part-table thead th{background:#e5f1ef!important;vertical-align:middle;-webkit-print-color-adjust:exact;print-color-adjust:exact}
- html.print-doh .doh-part-table th:first-child{width:10%;text-align:left}
+ html.print-doh .doh-part-table-0 th:first-child{width:10%;text-align:left}
  html.print-doh .doh-part-table thead th{font-size:6pt;white-space:normal;overflow-wrap:anywhere}
  html.print-doh .doh-part-table tfoot{font-weight:700}
 }
@@ -516,3 +524,26 @@ html.print-admission .soap-signature-overlay{max-width:30mm;max-height:16mm}
 .audit-values{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin:18px 0}.audit-values small{display:block;color:#7d8aa0;font-weight:700;margin-bottom:6px}.audit-values pre{margin:0;padding:12px;border:1px solid #e2eaea;border-radius:8px;white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;line-height:1.5;background:#f8fbfa}
 
 .dose-side-automatic .choice-group button.active:disabled{opacity:1;cursor:default}
+
+.field-invalid input,.field-invalid select,.field-invalid textarea,.field-invalid .password-field{border-color:#c93b32}.field-invalid .field-error{color:#b52e26;font-weight:700}.field-invalid input:focus,.field-invalid select:focus,.field-invalid textarea:focus{border-color:#c93b32;box-shadow:0 0 0 3px #c93b3222}
+
+.patient-search-results button strong,.patient-search-results button small,.patient-search-selected strong,.patient-search-selected small{display:block}.patient-search-results button small,.patient-search-selected small{margin-top:3px;color:#617d7d;font-size:12px}.patient-search-selected{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 10px;border:1px solid #8cc9c0;border-radius:7px;background:#f1faf8;color:#2c5354}.patient-search-selected button{border:0;background:transparent;color:#087e78;font-weight:700;cursor:pointer}.patient-search-field .field-error{color:#b52e26;font-weight:700}@media screen{:root[data-theme=dark] .patient-search-selected{background:#172c30;color:#e6ebf2}:root[data-theme=dark] .patient-search-results button small,:root[data-theme=dark] .patient-search-selected small{color:#b9caca}}
+
+.patient-search-selected{min-height:40px;padding:8px 10px;border:1px solid #dfe8e8;background:#fff;border-radius:7px;font-size:13px;font-weight:400}.patient-search-selected>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.patient-search-selected button{font-size:12px;font-weight:700;flex:none}.patient-search-results{max-height:200px}.patient-search-results button{padding:8px 10px}@media screen{:root[data-theme=dark] .patient-search-selected{background:#172238;border-color:#334155}}
+
+.patient-search-control{position:relative}.patient-search-control input{padding-right:32px}.patient-search-arrow{position:absolute;right:10px;top:50%;transform:translateY(-50%);pointer-events:none;color:#2c5354}.patient-search-control .patient-search-results{top:100%;border-radius:0;box-shadow:0 3px 8px rgb(10 22 40 / 12%);max-height:200px}.patient-search-results button{padding:7px 10px;font-size:13px;white-space:normal}.patient-search-results button.active,.patient-search-results button:hover{background:#e7f5f2}.patient-search-selected button{display:flex;align-items:center;color:#2c5354;padding:0}.patient-search-selected:focus-within{border-color:#59b7ad;box-shadow:0 0 0 3px #16a49715}
+
+.patient-search-control .patient-search-results{position:static;width:100%;margin-top:0;box-sizing:border-box}.patient-search-control .patient-search-arrow{top:20px;transform:translateY(-50%)}
+
+@media print{html.print-registry .registry-print-table{font-family:Arial,sans-serif}html.print-registry .registry-print-table thead{height:30mm}html.print-registry .registry-print-table tbody td{vertical-align:top}}
+
+.payslip-deductions strong{color:#b83a32;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+
+.arc-form-logo:has(.brand-logo-lifemed),.brand-mark:has(.brand-logo-lifemed){background:#fff!important}.arc-form-logo .brand-logo-lifemed,.brand-mark .brand-logo-lifemed{object-fit:contain!important}
+
+.refund-summary{display:flex;flex-direction:column;align-items:flex-start;gap:5px;white-space:nowrap}
+
+.payment-service-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) 40px;gap:13px;align-items:start}.payment-service-remove{margin-top:24px;width:40px;height:40px;border:1px solid #dfe8e8;border-radius:7px;background:transparent;color:#728b8b;display:grid;place-items:center;cursor:pointer}.payment-service-remove:hover{color:#b84e48;border-color:#e8b9b5;background:#fff7f6}.payment-service-remove:focus-visible{outline:2px solid #158f89;outline-offset:2px}@media(max-width:480px){.payment-service-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 36px;gap:8px}.payment-service-remove{width:36px}}
+@media print{.payslip-screen-note{display:none!important}}
+
+.payslip-sheet + .payslip-sheet{margin-top:20px}@media print{.payslip-sheet + .payslip-sheet{margin-top:0;break-before:page;page-break-before:always}.payslip-sheet{break-inside:avoid;page-break-inside:avoid}}

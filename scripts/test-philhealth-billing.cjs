@@ -41,8 +41,8 @@ async function checkPaymentGuards() {
   assert(first>=0&&last>first)
   const code=ts.transpileModule(source.slice(first,last),{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.None}}).outputText
   let handler,encounter
-  const names=['clinicalRouter','requirePage','prisma','servicingBranch','boosterServiceForBrand']
-  const dependencies=[{post:(_path,_guard,fn)=>{handler=fn}},()=>()=>{}, {encounter:{findUnique:async()=>encounter}},()=> 'Guimba',()=> 'Anti-rabies vaccine']
+  const names=['clinicalRouter','requirePage','prisma','servicingBranch','boosterServiceForBrand','PHILHEALTH_VERIFICATION_PENDING']
+  const dependencies=[{post:(_path,_guard,fn)=>{handler=fn}},()=>()=>{}, {encounter:{findUnique:async()=>encounter}},()=> 'Guimba',()=> 'Anti-rabies vaccine','PhilHealth verification required']
   new Function(...names,code)(...dependencies)
   async function call(category,philhealth,classification,billing=classification,preExp=false){
     encounter={id:'e',branch:'Guimba',booster:false,preExp,category,billing,patient:{philhealth}}
@@ -50,6 +50,8 @@ async function checkPaymentGuards() {
     await handler({body:{encounterId:'e',classification},user:{allBranches:true}},result)
     return result
   }
+  assert.equal((await call('III',false,'Walk-in','PhilHealth verification required')).statusCode,409)
+  assert.equal((await call('III',true,'PhilHealth','PhilHealth verification required')).statusCode,409)
   assert.equal((await call('II',true,'PhilHealth')).statusCode,400)
   assert.equal((await call('II',true,'For PhilHealth')).statusCode,400)
   assert.equal((await call('III',false,'PhilHealth')).statusCode,400)

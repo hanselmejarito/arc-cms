@@ -124,6 +124,7 @@ model Encounter {
   biteTime                   String          @default("")
   side                       String          @default("")
   site                       String          @default("")
+  bodyView                   String          @default("")
   place                      String          @default("")
   washed                     Boolean?
   tandok                     Boolean?
@@ -388,6 +389,7 @@ model FinanceEntry {
 
 model Refund {
   id          String @id
+  reference   String? @unique
   patient     String
   payment     String
   branch      String

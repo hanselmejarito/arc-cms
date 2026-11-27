@@ -66,6 +66,7 @@ export function encounterClient(e: Encounter) {
     biteTime: e.biteTime,
     side: e.side,
     site: e.site,
+    bodyView: e.bodyView,
     place: e.place,
     washed: e.washed,
     tandok: e.tandok,
@@ -292,6 +293,7 @@ export function financeClient(x: FinanceEntry) {
 export function refundClient(x: Refund) {
   return {
     id: x.id,
+    reference: x.reference,
     patient: x.patient,
     payment: x.payment,
     branch: x.branch,
@@ -424,12 +426,13 @@ export function contributionOverrideClient(x: { id: string, employeeId: string, 
 }
 
 export function attendanceCorrectionClient(row: { id: string, userName: string, record: string, oldValue: string, newValue: string, time: string }) {
-  const [date, field] = row.record.split(' · ')
+  const [date, field, ...staffParts] = row.record.split(' · ')
   const splitAt = row.newValue.indexOf(' · ')
   return {
     id: row.id,
     date: date || '',
     field: field || '',
+    staff: staffParts.join(' · ') || '',
     original: row.oldValue,
     updated: splitAt === -1 ? row.newValue : row.newValue.slice(0, splitAt),
     reason: splitAt === -1 ? '' : row.newValue.slice(splitAt + 3),

@@ -1,5 +1,6 @@
 import React from 'react'
-import { Plus, Syringe, CreditCard, X } from 'lucide-react'
+import { createPortal } from 'react-dom'
+import { Plus, Syringe, CreditCard, X, ChevronDown } from 'lucide-react'
 import { api } from '../api'
 import { branches, fmt, money, servicePrice } from '../data'
 import { Badge, Button, Card, Field, Modal, SectionTitle, Table } from '../components'
@@ -10,6 +11,42 @@ const priceName = { ERIG: 'ERIG (serum)', TT: 'Tetanus Toxoid', Flu: 'Flu', 'Flu
 const blankItem = () => ({ id: crypto.randomUUID(), service: '', stockLineId: '', stockQuantity: '1', brand: '', remarks: '', price: '' })
 const blank = (branch, patientId, userName) => ({ branch: branch === 'All branches' ? '' : branch, patientId: patientId || '', requestId: crypto.randomUUID(), administeredBy: userName || '', items: [blankItem()] })
 const errorMessage = e => e instanceof Error ? e.message : 'Request failed.'
+
+export function filterTreatmentPatients(patients, query) {
+  const words = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean)
+  return patients.filter(p => {
+    const text = [p.name,p.first,p.middle,p.last,p.birthday,fmt(p.birthday),p.branch,p.contact,p.id].filter(Boolean).join(' ').toLocaleLowerCase()
+    return words.every(word => text.includes(word))
+  })
+}
+
+export function PatientSearch({ patients, value, onChange, attempted, label = 'Patient', required = true, disabled = false, help = '', placeholder = 'Search name, birthday, contact or branch', emptyMessage = 'No patient found. Check the spelling or register the patient first.', compact = false, showContact = true }) {
+  const selected = patients.find(p => p.id === value)
+  const [query, setQuery] = React.useState('')
+  const [open, setOpen] = React.useState(false)
+  const [editing, setEditing] = React.useState(false)
+  const [active, setActive] = React.useState(0)
+  const inputRef = React.useRef(null)
+  const [placement, setPlacement] = React.useState(null)
+  const listId = React.useId()
+  const results = filterTreatmentPatients(showContact ? patients : patients.map(p => ({...p, contact: ''})), query)
+  const matches = results.slice(0, 5)
+  const missing = attempted && !value
+  React.useEffect(() => { if (missing) inputRef.current?.focus() }, [attempted])
+  React.useLayoutEffect(() => { if (!open || !inputRef.current) return; const update = () => { const rect = inputRef.current?.getBoundingClientRect(); if (!rect) return; const below = window.innerHeight - rect.bottom - 8, above = rect.top - 8, upward = below < 180 && above > below; setPlacement({ position:'fixed', left:rect.left, width:rect.width, ...(upward ? {bottom:window.innerHeight-rect.top} : {top:rect.bottom}), maxHeight:Math.max(50,Math.min(200,upward ? above : below)), zIndex:150 }) }; update(); window.addEventListener('resize',update); window.addEventListener('scroll',update,true); return () => { window.removeEventListener('resize',update); window.removeEventListener('scroll',update,true) } }, [open])
+  const choose = patient => { onChange(patient.id); setQuery(''); setOpen(false); setEditing(false); setActive(0) }
+  const detail = p => [p.birthday ? fmt(p.birthday) : '', showContact ? p.contact || '' : '', p.branch || ''].filter(Boolean).join(' · ')
+  const display = p => compact ? p.name : [p.name, detail(p)].filter(Boolean).join(' · ')
+  return <div className={'field patient-search-field' + (missing ? ' field-invalid' : '')}>
+    <label htmlFor={listId+'-input'}>{label} {required&&<span>*</span>}</label>
+    {selected && !editing ? <div className="patient-search-selected"><span title={display(selected)}>{display(selected)}</span><button type="button" disabled={disabled} onClick={() => { setEditing(true); setQuery(''); setOpen(true); setActive(0); setTimeout(() => inputRef.current?.focus(), 0) }} aria-label={'Change '+label.toLowerCase()}><ChevronDown size={16}/></button></div> : <>
+      <div className="patient-search-control"><input ref={inputRef} id={listId+'-input'} role="combobox" aria-label={label} aria-required={required} aria-invalid={missing} aria-describedby={missing ? listId+'-error' : undefined} aria-autocomplete="list" aria-expanded={open} aria-controls={listId} aria-activedescendant={open && matches[active] ? listId+'-'+active : undefined} autoComplete="off" placeholder={placeholder} disabled={disabled} value={query} onFocus={()=>setOpen(true)} onChange={e=>{setQuery(e.target.value);setOpen(true);setActive(0)}} onBlur={()=>{setOpen(false);setEditing(false)}} onKeyDown={e=>{if(e.key==='Escape'){setOpen(false);return}if(e.key==='ArrowDown'){e.preventDefault();setOpen(true);setActive(i=>Math.min(i+1,Math.max(0,matches.length-1)))}else if(e.key==='ArrowUp'){e.preventDefault();setActive(i=>Math.max(0,i-1))}else if(e.key==='Enter'&&open&&matches[active]){e.preventDefault();choose(matches[active])}}}/><ChevronDown className="patient-search-arrow" size={16} aria-hidden="true"/>
+      {open&&placement&&createPortal(<div style={placement} className="patient-search-results" id={listId} role="listbox">{matches.length?matches.map((p,i)=><button type="button" id={listId+'-'+i} role="option" aria-selected={false} className={i===active?'active':''} key={p.id} onMouseDown={e=>e.preventDefault()} onClick={()=>choose(p)}><span>{display(p)}</span></button>):<div className="patient-search-empty">{emptyMessage}</div>}{results.length>5&&<div className="patient-search-empty">Showing 5 results. Type to narrow results.</div>}</div>,document.body)}</div>
+      {missing?<small id={listId+'-error'} className="field-error" role="alert">Please select a patient.</small>:null}
+    </>}
+    {help&&<small>{help}</small>}
+  </div>
+}
 
 function cents(value) {
   const text = String(value).trim()
@@ -80,6 +117,7 @@ export default function OtherTreatmentsPage({ branch, patientId, patients = [], 
   const [loading, setLoading] = React.useState(true)
   const [loadError, setLoadError] = React.useState('')
   const [modal, setModal] = React.useState(null)
+  const [patientAttempted, setPatientAttempted] = React.useState(false)
   const [form, setForm] = React.useState(() => blank(branch, patientId, userName))
   const [stock, setStock] = React.useState([])
   const [stockError, setStockError] = React.useState('')
@@ -155,11 +193,11 @@ export default function OtherTreatmentsPage({ branch, patientId, patients = [], 
   }
   const setItem = (id, values) => setForm(f => ({ ...f, items: f.items.map(x => x.id === id ? { ...x, ...values } : x) }))
   const selectService = (id, service) => setItem(id, { service, stockLineId: '', stockQuantity: '1', brand: '', price: service ? String(servicePrice(priceName[service]) || '') : '' })
-  const openCreate = () => { visitStockCache.current = { branch: '', services: {} }; setVisitStock({}); setForm(blank(branch, patientId, userName)); setModal({ kind: 'create' }) }
+  const openCreate = () => { setPatientAttempted(false); visitStockCache.current = { branch: '', services: {} }; setVisitStock({}); setForm(blank(branch, patientId, userName)); setModal({ kind: 'create' }) }
   const openGive = row => { setForm({ stockLineId: '', stockQuantity: '1', brand: '', administeredQuantity: '', administeredUnit: '', administeredBy: userName || '', remarks: '' }); setModal({ kind: 'give', row }) }
   const openPayment = row => { const group = row.visitId ? rows.filter(x => x.visitId === row.visitId) : [row]; if (row.visitId) { const pending = pendingPaymentRow(group); if (setPayments) setPayments(list => list.some(p => p.otherTreatmentVisitId === pending.otherTreatmentVisitId) ? list : [pending, ...list]); go('payments', 'other:' + pending.otherTreatmentId); return } setForm({ amount: '', method: '', externalReference: '' }); setModal({ kind: 'pay', row, group }) }
   const openCancel = row => { setForm({ reason: '' }); setModal({ kind: 'cancel', row }) }
-  const onSave = () => run(async () => {
+  const onSave = () => { if (modal.kind === 'create') setPatientAttempted(true); return run(async () => {
     if (modal.kind === 'create') {
       if (!form.patientId || !form.branch || !form.items.length) throw new Error('Select a patient, branch and at least one treatment.')
       if (!form.administeredBy.trim()) throw new Error('Enter the administering staff member.')
@@ -201,7 +239,7 @@ export default function OtherTreatmentsPage({ branch, patientId, patients = [], 
       if (setPayments && row.payment?.id) setPayments(list => list.map(p => p.id === row.payment.id ? paymentRow(row) : p))
       notify(row.payment ? 'Treatment cancelled · request a refund if needed' : 'Treatment cancelled')
     }
-  })
+  }) }
   return <>
     <SectionTitle eyebrow="CLINICAL CARE" title="Other treatments" description="Standalone services linked to the patient. No RER or admission number is created." action={<Button icon={Plus} onClick={openCreate}>New other treatment</Button>}/>
     <div className="notice-line"><span>Payment and treatment are separate. Stock is deducted only when treatment is confirmed given. Amounts must be checked against the clinic-approved price list.</span></div>
@@ -245,7 +283,7 @@ export default function OtherTreatmentsPage({ branch, patientId, patients = [], 
         </div></Card>)}
       </>}
       {modal.kind === 'create' && <><div className="form-grid">
-        <Field label="Patient" value={form.patientId} options={patients.map(p => [p.id, p.name + ' · ' + fmt(p.birthday) + ' · ' + p.branch])} onChange={e => setForm({ ...form, patientId: e.target.value })} required/>
+        <PatientSearch showContact={false} placeholder="Search name, birthday or branch" patients={patients} attempted={patientAttempted} value={form.patientId} onChange={id => setForm(f => ({ ...f, patientId:id }))}/>
         <Field label="Branch" value={form.branch} options={branch === 'All branches' ? branches.slice(1) : [branch]} onChange={e => { setVisitStock({}); setForm({ ...form, branch: e.target.value, items: form.items.map(x => ({ ...x, stockLineId: '' })) }) }} required/>
         <Field label="Administered by" value={form.administeredBy} onChange={e => setForm({ ...form, administeredBy: e.target.value })} required/>
         <Field label="Given at" value="Recorded automatically when saved" disabled/>

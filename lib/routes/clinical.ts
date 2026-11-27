@@ -1,3 +1,5 @@
+import { receivingBilling, PHILHEALTH_VERIFICATION_PENDING } from '../referralBilling.js'
+import { accessibleDoseEncounterIds } from '../referralDoseAccess.js'
 import { ApiRouter } from '../router.js'
 import { z } from 'zod'
 import type { Encounter, InventoryLine, Movement, Payment, Prisma, Refund } from '@prisma/client'
@@ -75,6 +77,7 @@ clinicalRouter.get('/clinical', requirePage('dashboard'), async (req, res) => {
   const scopedEnc = encounters.filter(e => inScopeEncounter(user, e))
   const payments = await repairStaleOpenBills(scopedEnc, paymentRows)
   const scopedIds = new Set(scopedEnc.map(e => e.id))
+  const accessibleDoseIds = accessibleDoseEncounterIds(scopedEnc, referrals)
   const lastByPatient = new Map<string, string>()
   for (const e of [...encounters].sort((a, b) => b.date.localeCompare(a.date))) {
     if (!lastByPatient.has(e.patientId)) lastByPatient.set(e.patientId, e.registry)
@@ -92,8 +95,14 @@ clinicalRouter.get('/clinical', requirePage('dashboard'), async (req, res) => {
   })
   res.json({
     patients: patientRows,
-    encounters: scopedEnc.map(encounterClient),
-    doses: doses.filter(d => scopedIds.has(d.encounterId) || d.branch === user.branchName || user.allBranches).map(doseClient),
+    encounters: scopedEnc.map(e => {
+      const link = referrals.find(r => r.status === 'Accepted' && r.encounterId === e.id && r.receivingEncounterId === e.receivingEncounterId && !!r.receivingEncounterId)
+      const receiving = link && encounters.find(other => other.id === link.receivingEncounterId && other.patientId === e.patientId && other.continuedFromEncounterId === e.id)
+      const tt = receiving?.tt as {given?:boolean;date?:string} | undefined
+      const erig = receiving?.erig as {brand?:string;date?:string} | undefined
+      return { ...encounterClient(e), ...(receiving ? { referralProgress: { branch:receiving.branch, registry:receiving.registry, animalStatus:receiving.animalStatus, tt:receiving.tt, erig:receiving.erig, ttGiven:!!tt?.given, ttDate:tt?.date||'', erigBrand:erig?.brand||'', erigDate:erig?.date||'' } } : {}) }
+    }),
+    doses: doses.filter(d => accessibleDoseIds.has(d.encounterId) || d.branch === user.branchName || user.allBranches).map(doseClient),
     notes: notes.filter(n => scopedIds.has(n.encounterId) || user.allBranches).map(noteClient),
     payments: [...(user.allBranches || canPage(user.role, 'payments')
       ? payments.filter(p => user.allBranches || p.branch === user.branchName)
@@ -237,20 +246,22 @@ clinicalRouter.patch('/patients/:id', requirePage('patients'), async (req, res) 
     let refunds: Awaited<ReturnType<typeof reclassifyWalkInInTx>>['refunds'] = []
     let eligible = false
     let payments: Awaited<ReturnType<typeof reclassifyWalkInInTx>>['payments'] = []
-    if (turnOnPh) {
+    if (next.philhealth) {
       const visits = await tx.encounter.findMany({
         where: { patientId: existing.id, past: false },
         orderBy: { date: 'desc' }
       })
-      const walkIn = visits.find(enc => enc.billing === 'Walk-in' && !enc.booster && inScopeEncounter(req.user!, enc))
+      const candidate = (enc: Encounter) => !enc.booster && !enc.preExp && enc.rer && enc.category === 'III' && enc.remark !== 'Transferred' && inScopeEncounter(req.user!, enc)
+      const walkIn = visits.find(enc => enc.billing === PHILHEALTH_VERIFICATION_PENDING && candidate(enc)) || (turnOnPh ? visits.find(enc => enc.billing === 'Walk-in' && candidate(enc)) : undefined)
       if (walkIn && walkIn.rer && walkIn.category === 'III' && !walkIn.preExp) {
         const branchRow = await tx.branch.findUnique({ where: { name: walkIn.branch } })
-        const billing = branchRow?.accreditation === 'Accredited' ? 'PhilHealth' : 'For PhilHealth'
-        const done = await reclassifyWalkInInTx(tx, walkIn, patient.name, billing)
-        encounter = done.updated
-        refunds = done.refunds
-        eligible = done.eligible
-        payments = done.payments
+        if (branchRow?.accreditation === 'Accredited') {
+          const done = await reclassifyWalkInInTx(tx, walkIn, patient.name, 'PhilHealth')
+          encounter = done.updated
+          refunds = done.refunds
+          eligible = done.eligible
+          payments = done.payments
+        }
       }
     }
     return { patient, encounter, refunds, eligible, payments }
@@ -295,9 +306,7 @@ clinicalRouter.post('/admissions', requirePage('admissions'), async (req, res) =
   const branchRow = await prisma.branch.findUnique({ where: { name: visit.branch } })
   if (!branchRow) return res.status(400).json({ error: 'Unknown branch' })
   const accredited = branchRow.accreditation === 'Accredited'
-  if (!accredited && visit.billing !== 'Walk-in' && visit.billing !== 'For PhilHealth') {
-    return res.status(400).json({ error: 'Select Pay now or For PhilHealth' })
-  }
+  if (visit.billing === 'For PhilHealth') return res.status(400).json({ error: 'For PhilHealth is no longer available for new admissions.' })
 
   let patient = parsed.data.patientId
     ? await prisma.patient.findUnique({ where: { id: parsed.data.patientId } })
@@ -372,7 +381,7 @@ clinicalRouter.post('/admissions', requirePage('admissions'), async (req, res) =
     }
     const billing = accredited
       ? (patient.philhealth ? 'PhilHealth' : 'Walk-in')
-      : visit.billing
+      : 'Walk-in'
     const registry = await issueRegistry(tx, visit.branch, visit.date)
     const encId = await nextPrefixedId(tx, 'Encounter', 'ENC-')
     const now = new Date().toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })
@@ -425,9 +434,7 @@ clinicalRouter.post('/admissions', requirePage('admissions'), async (req, res) =
         method: billing === 'PhilHealth' ? 'PhilHealth' : '—',
         reference: '—',
         status: billing === 'Walk-in' ? 'Pending' : 'Not billed',
-        remarks: billing === 'For PhilHealth'
-          ? 'Not billed · give Day 0 then refer for PhilHealth'
-          : billing === 'PhilHealth' ? '₱0 · PhilHealth' : 'Not yet paid',
+        remarks: billing === 'PhilHealth' ? '₱0 · PhilHealth' : 'Not yet paid',
         txn: await issueTxn(tx, visit.branch, visit.date)
       }
     })
@@ -570,7 +577,9 @@ clinicalRouter.patch('/encounters/:id', requirePage('exposure'), async (req, res
   const existing = await prisma.encounter.findUnique({ where: { id: req.params.id } })
   if (!existing) return res.status(404).json({ error: 'Admission not found' })
   if (!inScopeEncounter(req.user!, existing)) return res.status(403).json({ error: 'This is not your branch' })
+  if (existing.remark === 'Transferred') return res.status(409).json({ error: 'This visit was transferred and is read-only. Continue treatment at the receiving branch.' })
   const body = req.body as Record<string, unknown>
+  if (existing.billing === PHILHEALTH_VERIFICATION_PENDING && 'billing' in body && body.billing !== PHILHEALTH_VERIFICATION_PENDING) return res.status(409).json({ error: 'Confirm PhilHealth membership in the patient record before changing this visit billing.' })
   const day0Input = body.day0 as { given?: boolean; date?: unknown; dose?: unknown; side?: unknown; animalStatus?: unknown; signature?: unknown; signatureMethod?: unknown; savedSignatureId?: unknown; savedSignatureVersion?: unknown } | undefined
   if (day0Input?.given && day0Input.date != null && (typeof day0Input.date !== 'string' || !realDate.safeParse(day0Input.date).success || day0Input.date > clinicDate())) return res.status(400).json({ error: 'Enter a valid Day 0 date that is not in the future.' })
   if (day0Input?.given && (typeof day0Input.dose !== 'string' || typeof day0Input.side !== 'string' || !validDoseSide(day0Input.dose, day0Input.side))) return res.status(400).json({ error: 'Select the appropriate Day 0 injection side.' })
@@ -580,6 +589,7 @@ clinicalRouter.patch('/encounters/:id', requirePage('exposure'), async (req, res
   }
   if (day0Input?.savedSignatureId && (typeof day0Input.savedSignatureId !== 'string' || typeof day0Input.savedSignatureVersion !== 'string' || !day0Input.given || day0Input.signature)) return res.status(400).json({ error: 'Select a valid Day 0 saved signature.' })
   if (body.rer === true && (body.booster === true || (body.booster !== false && existing.booster)) && !boosterServiceForBrand(typeof body.brand === 'string' ? body.brand : existing.brand)) return res.status(400).json({ error: 'Select the ARV brand before saving a booster RER.' })
+  if ('bodyView' in body && !['', 'Front', 'Back'].includes(String(body.bodyView))) return res.status(400).json({ error: 'Select a valid front or back location.' })
   if (body.site && HIGH_RISK_SITES.has(String(body.site))) body.category = 'III'
   const nextCategory = typeof body.category === 'string' ? body.category : existing.category
   const nextBooster = typeof body.booster === 'boolean' ? body.booster : existing.booster
@@ -609,7 +619,7 @@ clinicalRouter.patch('/encounters/:id', requirePage('exposure'), async (req, res
         prisma.branch.findUnique({ where: { name: existing.branch } })
       ])
       body.billing = patient?.philhealth
-        ? (branchRow?.accreditation === 'Accredited' ? 'PhilHealth' : 'For PhilHealth')
+        ? (branchRow?.accreditation === 'Accredited' ? 'PhilHealth' : 'Walk-in')
         : 'Walk-in'
     }
   }
@@ -628,6 +638,7 @@ clinicalRouter.patch('/encounters/:id', requirePage('exposure'), async (req, res
     body.biteTime = ''
     body.side = ''
     body.site = ''
+    body.bodyView = ''
     body.place = ''
     body.washed = null
     body.tandok = null
@@ -654,8 +665,10 @@ clinicalRouter.patch('/encounters/:id', requirePage('exposure'), async (req, res
       prisma.patient.findUnique({ where: { id: existing.patientId } }),
       prisma.branch.findUnique({ where: { name: existing.branch } })
     ])
-    if (!paid && patient?.philhealth) body.billing = branchRow?.accreditation === 'Accredited' ? 'PhilHealth' : 'For PhilHealth'
+    if (!paid && patient?.philhealth) body.billing = branchRow?.accreditation === 'Accredited' ? 'PhilHealth' : 'Walk-in'
   }
+  // A clinical edit must not silently release a referral from billing hold.
+  if (existing.billing === PHILHEALTH_VERIFICATION_PENDING) body.billing = PHILHEALTH_VERIFICATION_PENDING
   const nextBilling = typeof body.billing === 'string' ? body.billing : existing.billing
   if (nextCategory === 'III' && !nextBooster && !nextPreExp && (nextBilling === 'PhilHealth' || nextBilling === 'For PhilHealth')) {
     const patient = await prisma.patient.findUnique({ where: { id: existing.patientId }, select: { philhealth: true } })
@@ -704,7 +717,7 @@ clinicalRouter.patch('/encounters/:id', requirePage('exposure'), async (req, res
     return res.status(409).json({ error: 'The doctor name cannot be changed after a signature is saved.' })
   const allowed = [
     'chief' , 'animal', 'animalOther', 'biteType', 'pet', 'vaccinated', 'stray', 'owned', 'owner',
-    'biteDate', 'biteTime', 'side', 'site', 'place', 'washed', 'tandok', 'wound', 'category',
+    'biteDate', 'biteTime', 'side', 'site', 'bodyView', 'place', 'washed', 'tandok', 'wound', 'category',
     'booster', 'preExp', 'vaccine', 'brand', 'regimen', 'history', 'bp', 'weight', 'temp',
     'consent', 'consentBy', 'tt', 'rig', 'erig', 'pepEligible', 'animalStatus', 'progress',
     'doctor', 'rer', 'billing'
@@ -829,6 +842,7 @@ clinicalRouter.post('/encounters/:id/animal-observations', requirePage('treatmen
   const enc = await prisma.encounter.findUnique({ where: { id: req.params.id } })
   if (!enc) return res.status(404).json({ error: 'Admission not found.' })
   if (!inScopeEncounter(req.user!, enc)) return res.status(403).json({ error: 'This is not your branch.' })
+  if (enc.remark === 'Transferred') return res.status(409).json({ error: 'This visit was transferred and is read-only. Continue treatment at the receiving branch.' })
   if (!enc.rer || enc.preExp) return res.status(400).json({ error: 'Animal status is available for exposure cases.' })
   const row = await prisma.animalObservation.create({ data: { ...parsed.data, encounterId: enc.id, recordedBy: req.user!.name, branch: servicingBranch(enc) } })
   await audit(req, { module: 'Treatment', action: 'Animal status reported', record: enc.registry, newValue: parsed.data.status + ' · reported ' + parsed.data.reportedDate, branch: servicingBranch(enc) })
@@ -841,6 +855,7 @@ clinicalRouter.post('/encounters/:id/day14-workflow-review', requirePage('treatm
   const enc = await prisma.encounter.findUnique({ where: { id: req.params.id } })
   if (!enc) return res.status(404).json({ error: 'Admission not found.' })
   if (!inScopeEncounter(req.user!, enc)) return res.status(403).json({ error: 'This is not your branch.' })
+  if (enc.remark === 'Transferred') return res.status(409).json({ error: 'This visit was transferred and is read-only. Continue treatment at the receiving branch.' })
   const ids = [enc.id, enc.continuedFromEncounterId, enc.receivingEncounterId].filter(Boolean) as string[]
   const doses = await prisma.dose.findMany({ where: { encounterId: { in: ids } } })
   if (enc.day14Workflow !== 'legacy' || enc.regimen === 'IM' || enc.booster || enc.preExp || !enc.rer || !['Ongoing','Incomplete'].includes(caseInfo(enc, doses).status)) return res.status(409).json({ error: 'Only unresolved legacy PEP ID cases can be reviewed here.' })
@@ -868,7 +883,7 @@ const doseSchema = z.object({
 })
 
 clinicalRouter.post('/encounters/:id/followup-payment', requirePage('payments'), async (req, res) => {
-  const parsed = z.object({ day: z.enum(['D3', 'D7', 'D14', 'D21', 'D28']), priceCentavos: z.number().int().positive().max(100000000), reason: z.string().trim().max(500).default(''), reference: z.string().trim().max(120).default(''), method: z.enum(['Cash','GCash','Bank transfer']).default('Cash'), discountType: z.enum(['Senior','PWD']).optional() }).safeParse(req.body)
+  const parsed = z.object({ day: z.enum(['D3', 'D7', 'D14', 'D21', 'D28']), priceCentavos: z.number().int().positive().max(100000000), extras: z.array(z.object({ service: z.enum(['Tetanus Toxoid','ERIG (serum)']), priceCentavos: z.number().int().positive().max(100000000) })).max(2).default([]), reason: z.string().trim().max(500).default(''), reference: z.string().trim().max(120).default(''), method: z.enum(['Cash','GCash','Bank transfer']).default('Cash'), discountType: z.enum(['Senior','PWD']).optional() }).safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ error: 'Enter a valid follow-up dose and price.' })
   const enc = await prisma.encounter.findUnique({ where: { id: req.params.id }, include: { patient: true } })
   if (!enc) return res.status(404).json({ error: 'Admission not found.' })
@@ -876,13 +891,19 @@ clinicalRouter.post('/encounters/:id/followup-payment', requirePage('payments'),
   if (!enc.rer || enc.remark === 'Transferred' || enc.billing !== 'Walk-in') return res.status(400).json({ error: 'Select an active cash follow-up case.' })
   const service = boosterServiceForBrand(enc.brand) || 'Anti-rabies vaccine'
   const defaultPrice = service === 'Speeda' ? 150000 : 75000
-  if (parsed.data.priceCentavos !== defaultPrice && !parsed.data.reason) return res.status(400).json({ error: 'Enter a reason for the price change.' })
+  if (new Set(parsed.data.extras.map(item => item.service)).size !== parsed.data.extras.length) return res.status(400).json({ error: 'Each additional service can only be selected once.' })
+  if ((parsed.data.priceCentavos !== defaultPrice || parsed.data.extras.some(item => item.priceCentavos !== SERVICE_PRICES[item.service] * 100)) && !parsed.data.reason) return res.status(400).json({ error: 'Enter a reason for the price change.' })
+  if (enc.booster && parsed.data.extras.some(item => item.service === 'ERIG (serum)')) return res.status(400).json({ error: 'ERIG cannot be added to a booster bill.' })
   if (parsed.data.discountType === 'Senior' && !enc.patient.senior || parsed.data.discountType === 'PWD' && !enc.patient.pwd) return res.status(400).json({ error: 'Verify the patient discount eligibility first.' })
   const linked = [enc.id, enc.continuedFromEncounterId, enc.receivingEncounterId].filter(Boolean) as string[]
   const root = enc.continuedFromEncounterId || enc.id
   try {
     const row = await prisma.$transaction(async tx => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'followup:' + root}))`
+      if (parsed.data.extras.length) {
+        const prior = await tx.payment.findMany({ where: { encounterId: { in: linked }, service: { in: parsed.data.extras.map(item => item.service) }, status: { in: ['Pending', 'Paid', 'Review'] }, amount: { gt: 0 } }, select: { service: true } })
+        if (prior.length) throw new Error('A selected service already has a pending or paid bill. Review it before collecting again.')
+      }
       const doses = await tx.dose.findMany({ where: { encounterId: { in: linked } } })
       const existing = await tx.payment.findFirst({ where: { encounterId: { in: linked }, followUpDay: parsed.data.day } })
       const optionalDay14 = enc.day14Workflow === 'optional' && enc.regimen !== 'IM' && parsed.data.day === 'D14' && doses.some(d => d.day === 'D7') && !doses.some(d => d.day === 'D14' || d.day === 'D28')
@@ -896,13 +917,20 @@ clinicalRouter.post('/encounters/:id/followup-payment', requirePage('payments'),
       const date = clinicDate(), branch = servicingBranch(enc), txn = existing?.txn || await issueTxn(tx, branch, date)
       const fields = { amount: (parsed.data.priceCentavos - discount) / 100, unitPriceCentavos: parsed.data.priceCentavos, quantity: 1, discountType: parsed.data.discountType || null, discountCentavos: discount, method: parsed.data.method, reference: parsed.data.reference || '—', status: 'Paid', remarks: 'Follow-up · ' + parsed.data.day + (parsed.data.reason ? ' · Price reason: ' + parsed.data.reason : ''), date }
       const payment = existing ? await tx.payment.update({ where: { id: existing.id }, data: fields }) : await tx.payment.create({ data: { id: await nextPrefixedId(tx, 'Payment', 'PAY-'), encounterId: enc.id, registry: enc.registry, patient: enc.patient.name, branch, service, classification: 'Walk-in', txn, followUpDay: parsed.data.day, ...fields } })
-      await tx.auditLog.create({ data: { userId: req.user!.id, userName: req.user!.name + ' (' + req.user!.role + ')', module: 'Payment', action: 'Cash follow-up payment recorded', record: txn, branch, oldValue: '', newValue: parsed.data.day + ' · ' + payment.amount, time: clinicDate(), device: req.userAgent } })
-      return payment
+      const payments = [payment]
+      let gross = parsed.data.priceCentavos
+      for (const item of parsed.data.extras) {
+        const itemDiscount = parsed.data.discountType ? Math.round((gross + item.priceCentavos) * 0.2) - Math.round(gross * 0.2) : 0
+        gross += item.priceCentavos
+        payments.push(await tx.payment.create({ data: { id: await nextPrefixedId(tx, 'Payment', 'PAY-'), encounterId: enc.id, registry: enc.registry, patient: enc.patient.name, branch, service: item.service, classification: 'Walk-in', txn, ...fields, amount: (item.priceCentavos - itemDiscount) / 100, unitPriceCentavos: item.priceCentavos, discountCentavos: itemDiscount } }))
+      }
+      await tx.auditLog.create({ data: { userId: req.user!.id, userName: req.user!.name + ' (' + req.user!.role + ')', module: 'Payment', action: 'Cash follow-up payment recorded', record: txn, branch, oldValue: '', newValue: parsed.data.day + ' · ' + payments.map(p => p.service + ': ' + p.amount).join(' · '), time: clinicDate(), device: req.userAgent } })
+      return payments
     })
-    return res.json(paymentClient(row))
+    return res.json({ payments: row.map(paymentClient) })
   } catch (err) {
     const message = err instanceof Error ? err.message : ''
-    if (message.startsWith('Select the next') || message.startsWith('A payment for this dose') || message.startsWith('An older ARV payment')) return res.status(409).json({ error: message })
+    if (message.startsWith('Select the next') || message.startsWith('A payment for this dose') || message.startsWith('An older ARV payment') || message.startsWith('A selected service')) return res.status(409).json({ error: message })
     throw err
   }
 })
@@ -949,6 +977,7 @@ clinicalRouter.post('/encounters/:id/doses', requirePage('treatments'), async (r
   const enc = await prisma.encounter.findUnique({ where: { id: req.params.id } })
   if (!enc) return res.status(404).json({ error: 'Admission not found' })
   if (!inScopeEncounter(req.user!, enc)) return res.status(403).json({ error: 'This is not your branch' })
+  if (enc.remark === 'Transferred') return res.status(409).json({ error: 'This visit was transferred and is read-only. Continue treatment at the receiving branch.' })
   if (!enc.preExp && !parsed.data.animalStatus) return res.status(400).json({ error: 'Select the status of the biting animal.' })
   const servicing = servicingBranch(enc)
   const nurse = await resolveVaccinator(prisma, servicing, parsed.data.vaccinator)
@@ -1011,6 +1040,7 @@ clinicalRouter.post('/encounters/:id/doses/:day/signature', requireAny('exposure
   const existing = await prisma.dose.findFirst({ where: { encounterId: enc.id, day: req.params.day } })
   if (!existing) return res.status(404).json({ error: 'Record the dose first.' })
   if (!req.user!.allBranches && existing.branch !== req.user!.branchName) return res.status(403).json({ error: 'This is not your branch.' })
+  if (enc.remark === 'Transferred') return res.status(409).json({ error: 'This visit was transferred and is read-only. Continue treatment at the receiving branch.' })
   const parsed = z.object({ image: z.string().min(1).max(350000), method: z.enum(['pen','upload']), expectedImage: z.string().max(350000).nullable(), reason: z.string().trim().max(500).default('') }).safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ error: 'Enter a valid signature.' })
   const relatedDoses = await prisma.dose.findMany({ where: { encounterId: { in: [enc.id, enc.continuedFromEncounterId || '', enc.receivingEncounterId || ''].filter(Boolean) } } })
@@ -1044,6 +1074,7 @@ clinicalRouter.patch('/encounters/:id/doses/:day', requirePage('treatments'), as
   const enc = await prisma.encounter.findUnique({ where: { id: req.params.id } })
   if (!enc) return res.status(404).json({ error: 'Admission not found' })
   if (!inScopeEncounter(req.user!, enc)) return res.status(403).json({ error: 'This is not your branch' })
+  if (enc.remark === 'Transferred') return res.status(409).json({ error: 'This visit was transferred and is read-only. Continue treatment at the receiving branch.' })
   if (!enc.preExp && !parsed.data.animalStatus) return res.status(400).json({ error: 'Select the status of the biting animal.' })
   const servicing = servicingBranch(enc)
   const existing = await prisma.dose.findFirst({ where: { encounterId: enc.id, day: req.params.day } })
@@ -1301,9 +1332,11 @@ clinicalRouter.post('/payments', requirePage('payments'), async (req, res) => {
     return res.status(403).json({ error: 'This is not your branch' })
   }
   if (enc.booster && !boosterServiceForBrand(enc.brand)) return res.status(400).json({ error: 'Select the ARV brand in the RER before collecting a booster payment.' })
+  if (enc.billing === PHILHEALTH_VERIFICATION_PENDING) return res.status(409).json({ error: 'PhilHealth verification is required before billing this referral.' })
   const intent = req.body.intent === 'update' ? 'update' : 'collect'
   const booster = enc.booster
   const classification = booster ? 'Walk-in' : String(req.body.classification || enc.billing || enc.patient.classification)
+  if (classification === 'For PhilHealth' && enc.billing !== 'For PhilHealth') return res.status(400).json({ error: 'For PhilHealth is no longer available for new bills.' })
   if (enc.preExp && classification !== 'Walk-in') return res.status(400).json({ error: 'Pre-exposure treatment is billed as Walk-in, not PhilHealth.' })
   if (enc.preExp && enc.billing !== 'Walk-in') return res.status(409).json({ error: 'Review and save the PrEP RER billing before collecting payment.' })
   if (intent === 'collect' && enc.category === 'III' && !enc.preExp && !booster && ['PhilHealth','For PhilHealth'].includes(enc.billing) && classification === 'Walk-in') return res.status(400).json({ error: 'PhilHealth visits have no cash follow-up charge.' })
@@ -1319,6 +1352,7 @@ clinicalRouter.post('/payments', requirePage('payments'), async (req, res) => {
   if (priceInput && !priceInput.success) return res.status(400).json({ error: 'Enter a valid price and quantity for every service.' })
   if (priceInput && (intent !== 'collect' || free)) return res.status(400).json({ error: 'Custom prices are available when collecting a paid bill.' })
   const saved = await prisma.$transaction(async tx => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'followup:' + (enc.continuedFromEncounterId || enc.id)}))`
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'rer-payment:' + enc.id}))`
     if (booster && enc.billing !== 'Walk-in') {
       await tx.encounter.update({ where: { id: enc.id }, data: { billing: 'Walk-in', rig: '', erig: blankErig } })
@@ -1349,7 +1383,14 @@ clinicalRouter.post('/payments', requirePage('payments'), async (req, res) => {
       if (addsOtherOnlyServices(items, pendings, SERVICE_PRICES)) throw new Error('Record Flu, Hepatitis B and Pneumococcal in Other Treatments.')
       const current = new Map(due.map(row => [row.id, row]))
       const supplied = items.filter(item => item.pendingPaymentId)
-      if (supplied.length !== due.length || supplied.some(item => !current.has(item.pendingPaymentId!))) throw new Error('The bill changed. Reload and try again.')
+      if (new Set(supplied.map(item => item.pendingPaymentId)).size !== supplied.length || supplied.some(item => !current.has(item.pendingPaymentId!))) throw new Error('The bill changed. Reload and try again.')
+      const omitted = due.filter(row => !supplied.some(item => item.pendingPaymentId === row.id))
+      if (omitted.some(row => !['Tetanus Toxoid', 'ERIG (serum)'].includes(row.service))) throw new Error('Only TT or ERIG may be removed from the pending bill.')
+      if (omitted.length) {
+        const removed = await tx.payment.deleteMany({ where: { id: { in: omitted.map(row => row.id) }, status: 'Pending' } })
+        if (removed.count !== omitted.length) throw new Error('The bill changed. Reload and try again.')
+        await tx.auditLog.create({ data: { userId: req.user!.id, userName: req.user!.name + ' (' + req.user!.role + ')', module: 'Payment', action: 'Pending services removed before collection', record: txn, branch, oldValue: omitted.map(row => row.service).join(' · '), newValue: 'Not collected', time: clinicDate(), device: req.userAgent } })
+      }
       const additional = new Set<string>(), changed: string[] = []
       for (const item of items) {
         if (!SERVICE_PRICES[item.service] || (booster && item.service === 'ERIG (serum)')) throw new Error('Select a valid RER service.')
@@ -1365,6 +1406,11 @@ clinicalRouter.post('/payments', requirePage('payments'), async (req, res) => {
           if (item.unitPriceCentavos !== originalUnit) changed.push(item.service + ': ' + originalUnit + ' → ' + item.unitPriceCentavos)
         } else {
           if (item.pendingPaymentId || item.expectedAmountCentavos != null || due.some(row => row.service === item.service) || additional.has(item.service)) throw new Error('The bill changed. Reload and try again.')
+          if (['Tetanus Toxoid', 'ERIG (serum)'].includes(item.service)) {
+            const linkedIds = [enc.id, enc.continuedFromEncounterId, enc.receivingEncounterId].filter(Boolean) as string[]
+            const prior = await tx.payment.findFirst({ where: { encounterId: { in: linkedIds }, service: item.service, status: { in: ['Pending', 'Paid', 'Review'] }, amount: { gt: 0 } }, select: { id: true } })
+            if (prior) throw new Error('This service already has a pending or paid bill. Review it before collecting again.')
+          }
           additional.add(item.service)
           const defaultUnit = SERVICE_PRICES[item.service] * 100
           if (item.unitPriceCentavos !== defaultUnit) changed.push(item.service + ': ' + defaultUnit + ' → ' + item.unitPriceCentavos)
@@ -1532,6 +1578,10 @@ clinicalRouter.post('/referrals', requirePage('referrals'), async (req, res) => 
     return res.status(400).json({ error: 'Choose a case from a non-accredited branch and a different accredited receiving branch' })
   }
   const created = await prisma.$transaction(async tx => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'referral-source:' + enc.id}))`
+    const current = await tx.encounter.findUnique({ where: { id: enc.id } })
+    const existing = await tx.referral.findFirst({ where: { encounterId: enc.id, status: { in: ['Pending acceptance', 'Accepted'] } } })
+    if (!current || current.past || !current.rer || current.remark === 'Transferred' || current.receivingEncounterId || existing) return null
     const id = await nextPrefixedId(tx, 'Referral', 'REF-')
     return tx.referral.create({
       data: {
@@ -1551,6 +1601,7 @@ clinicalRouter.post('/referrals', requirePage('referrals'), async (req, res) => 
       }
     })
   })
+  if (!created) return res.status(409).json({ error: 'This visit already has an active referral or has been transferred.' })
   await audit(req, { module: 'Referral', action: 'Referral sent to ' + to, record: enc.registry, branch: from })
   res.json(referralClient(created))
 })
@@ -1564,11 +1615,19 @@ clinicalRouter.post('/referrals/:id/accept', requirePage('referrals'), async (re
   }
   const source = await prisma.encounter.findUnique({ where: { id: ref.encounterId } })
   if (!source) return res.status(404).json({ error: 'Source registry was not found' })
+  const [patient, receivingBranch] = await Promise.all([prisma.patient.findUnique({ where: { id: source.patientId } }), prisma.branch.findUnique({ where: { name: ref.to } })])
+  if (!patient || !receivingBranch) return res.status(400).json({ error: 'Patient or receiving branch was not found.' })
+  const billing = receivingBilling(source, patient, receivingBranch, ref)
   const result = await prisma.$transaction(async tx => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${'referral-source:' + source.id}))`
+    const currentRef = await tx.referral.findUnique({ where: { id: ref.id } })
+    const currentSource = await tx.encounter.findUnique({ where: { id: source.id } })
+    const alreadyAccepted = await tx.referral.findFirst({ where: { encounterId: source.id, status: 'Accepted' } })
+    if (!currentRef || currentRef.status !== 'Pending acceptance' || !currentSource || currentSource.past || currentSource.remark === 'Transferred' || currentSource.receivingEncounterId || alreadyAccepted) return null
     const receivingRegistry = await issueRegistry(tx, ref.to, ref.date)
     const receivingId = await nextPrefixedId(tx, 'Encounter', 'ENC-R', 7)
     const receiving = await tx.encounter.create({
-      data: receivingFrom(source, {
+      data: { ...receivingFrom(source, {
         id: receivingId,
         registry: receivingRegistry,
         branch: ref.to,
@@ -1577,8 +1636,9 @@ clinicalRouter.post('/referrals/:id/accept', requirePage('referrals'), async (re
         continuedFromEncounterId: source.id,
         originRegistry: source.registry,
         referredFrom: source.branch
-      })
+      }), billing }
     })
+    const receivingPayments = billing === 'PhilHealth' ? await syncOpenBill(tx, { ...receiving, rer: false }, receiving, patient.name) : []
     await tx.encounter.update({
       where: { id: source.id },
       data: { remark: 'Transferred', referredTo: ref.to, receivingRegistry, receivingEncounterId: receiving.id }
@@ -1587,38 +1647,12 @@ clinicalRouter.post('/referrals/:id/accept', requirePage('referrals'), async (re
       where: { id: ref.id },
       data: { status: 'Accepted', receivingRegistry, receivingEncounterId: receiving.id }
     })
-    let refund: Refund | null = null
-    if (ref.classification === 'PhilHealth' && source.category === 'III' && !source.booster && !source.preExp) {
-      const linkedDoses = await tx.dose.findMany({
-        where: { encounterId: { in: [source.id, source.continuedFromEncounterId || '', source.receivingEncounterId || ''].filter(Boolean) } }
-      })
-      if (refundEligible(source, linkedDoses)) {
-        const pays = await tx.payment.findMany({
-          where: { registry: ref.registry, branch: ref.from, status: 'Paid', NOT: { classification: 'PhilHealth' } }
-        })
-        const pay = pays[0]
-        const total = pays.reduce((s, p) => s + Number(p.amount || 0), 0)
-        if (pay && total > 0) {
-          const already = await tx.refund.findFirst({ where: { payment: { in: pays.map(p => p.id) } } })
-          if (!already) {
-            refund = await tx.refund.create({
-              data: {
-                id: await nextId(tx.refund, 'RFD-', 3),
-                patient: ref.patient,
-                payment: pay.id,
-                branch: pay.branch,
-                amount: total,
-                reason: 'Reclassified for PhilHealth after referral to ' + ref.to,
-                requested: clinicDate(),
-                status: 'Pending'
-              }
-            })
-          }
-        }
-      }
-    }
-    return { receiving, updatedRef, receivingRegistry, refund }
+    // Referral refunds are requested per transaction at the original branch.
+    const refund: Refund | null = null
+    const previousDoses = await tx.dose.findMany({ where: { encounterId: source.id } })
+    return { receiving, updatedRef, receivingRegistry, refund, receivingPayments, previousDoses }
   })
+  if (!result) return res.status(409).json({ error: 'This referral or source visit has already been accepted or transferred. Refresh the referral list.' })
   await audit(req, {
     module: 'Referral',
     action: 'Referral accepted · ' + source.registry + ' linked to ' + result.receivingRegistry,
@@ -1630,6 +1664,8 @@ clinicalRouter.post('/referrals/:id/accept', requirePage('referrals'), async (re
     encounter: encounterClient(result.receiving),
     originId: source.id,
     receivingRegistry: result.receivingRegistry,
+    payments: result.receivingPayments.map(paymentClient),
+    previousDoses: result.previousDoses.map(doseClient),
     refund: result.refund ? refundClient(result.refund) : null
   })
 })
@@ -1671,24 +1707,7 @@ async function reclassifyWalkInInTx(
       })
     }
   }
-  const paidWalkin = pays.filter(p => p.status === 'Paid' && Number(p.amount) > 0 && p.classification !== 'PhilHealth' && p.classification !== 'For PhilHealth')
-  if (eligible && paidWalkin.length) {
-    const already = await tx.refund.findFirst({ where: { payment: { in: paidWalkin.map(p => p.id) } } })
-    if (!already) {
-      refunds.push(await tx.refund.create({
-        data: {
-          id: await nextId(tx.refund, 'RFD-', 3),
-          patient: patientName,
-          payment: paidWalkin[0].id,
-          branch: paidWalkin[0].branch,
-          amount: paidWalkin.reduce((s, p) => s + Number(p.amount || 0), 0),
-          reason: 'Reclassified to ' + label + ' at ' + enc.branch,
-          requested: clinicDate(),
-          status: 'Pending'
-        }
-      }))
-    }
-  }
+  // Refunds are requested and reviewed separately; never create them automatically.
   // Explicit reclassification can establish the package only if there are no paid rows;
   // syncOpenBill deliberately preserves any existing paid transaction.
   await syncOpenBill(tx, enc, updated, patientName)
@@ -1726,6 +1745,7 @@ function receivingFrom(source: Encounter, patch: {
     biteTime: source.biteTime,
     side: source.side,
     site: source.site,
+    bodyView: source.bodyView,
     place: source.place,
     washed: source.washed,
     tandok: source.tandok,
@@ -1775,7 +1795,8 @@ clinicalRouter.post('/encounters/:id/reclassify', requirePage('patients'), async
   if (!enc.rer || enc.category !== 'III' || enc.preExp) return res.status(400).json({ error: 'Only assessed Category III cases can be reclassified to PhilHealth under the clinic policy.' })
   if (enc.billing !== 'Walk-in') return res.status(400).json({ error: 'Only walk-in visits can be reclassified to PhilHealth' })
   const branchRow = await prisma.branch.findUnique({ where: { name: enc.branch } })
-  const billing = branchRow?.accreditation === 'Accredited' ? 'PhilHealth' : 'For PhilHealth'
+  if (branchRow?.accreditation !== 'Accredited') return res.status(400).json({ error: 'This branch is not PhilHealth-accredited. Refer the patient to an accredited branch.' })
+  const billing = 'PhilHealth' as const
   const result = await prisma.$transaction(async tx => {
     const patient = await tx.patient.update({
       where: { id: enc.patientId },

@@ -1,0 +1,1 @@
+export const maySaveOwnSignature=(profile,role,employeeId,employees,name)=>!!(role==='Nurse'&&profile&&!profile.signature&&employeeId&&profile.name===name&&employees.filter(e=>e.name===name&&e.role==='Nurse'&&e.status==='Active').length===1&&employees.some(e=>e.id===employeeId&&e.name===name))

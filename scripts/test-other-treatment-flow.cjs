@@ -54,7 +54,7 @@ async function main() {
         }
         const nurseDuty=load(path.join('lib','nurseDuty.ts'),{'./clinical.js':clinical,'./dutyAccess.js':load(path.join('lib','dutyAccess.ts'),{})})
         const branchSchedules=load(path.join('lib','branchSchedules.ts'),{})
-        const deps = { '../router.js':router, '../auth.js':auth, '../prisma.js':{prisma:db}, '../clinical.js':clinical, '../nurseDuty.js':nurseDuty, '../branchSchedules.js':branchSchedules, '../attendanceCorrection.js':load(path.join('lib','attendanceCorrection.ts'),{}), '../../src/payrollEligibility.js':load(path.join('src','payrollEligibility.js'),{}), '../signatureInput.js':load(path.join('lib','signatureInput.ts'),{}),
+        const deps = { '../registry.js':{issueRefundReference:async()=> 'RFDGUI-26-'+randomUUID()}, '../router.js':router, '../auth.js':auth, '../prisma.js':{prisma:db}, '../clinical.js':clinical, '../nurseDuty.js':nurseDuty, '../branchSchedules.js':branchSchedules, '../attendanceCorrection.js':load(path.join('lib','attendanceCorrection.ts'),{}), '../../src/payrollEligibility.js':load(path.join('src','payrollEligibility.js'),{}), '../signatureInput.js':load(path.join('lib','signatureInput.ts'),{}),
           '../otherTreatment.js':domain, '../temporaryPatientAccess.js':{temporaryPatientAllowed:async()=>true}, '../shiftClose.js':{catchUpBranch:async()=>{}}, '../map.js':map,
           '../inventory.js':{ITEM_NAMES:['Flu'],ADJUST_REASONS:['Correction'],itemMeta:()=>({})},
           '../ids.js':{nextId:async()=>tag}, '../audit.js':{audit:async()=>({})} }
@@ -454,9 +454,9 @@ async function main() {
         packageRows=await syncBill(tx,phEncounter,phEncounter,'Synthetic')
         assert.deepEqual(packageRows.map(p=>p.id).sort(),idsBefore)
         console.log('PhilHealth package snapshot, zero patient charge and existing bill preservation: PASS')
-        let phPaymentNo=0
+        let phPaymentNo=0, phRowNo=0
         const followupTools=load(path.join('lib','followupCharge.ts'),{'./billingPolicy.js':prepPolicy,'./philhealthPackage.js':phPolicy,'./registry.js':registryTools})
-        const phDeps={z:require('zod').z,clinicalRouter:{post:(p,_g,h)=>{phHandlers[p]=h}},requirePage:()=>()=>{},prisma:db,inScopeEncounter:()=>true,servicingBranch:e=>e.branch,NURSE_ROLE:'Nurse',caseInfo:realClinical.caseInfo,protocolOf:realClinical.protocolOf,isPhilhealthCashFollowUp:phPolicy.isPhilhealthCashFollowUp,boosterServiceForBrand:prepPolicy.boosterServiceForBrand,isBoosterVaccineLine:prepPolicy.isBoosterVaccineLine,ensureFollowupCharge:followupTools.ensureFollowupCharge,clinicDate:()=>today,clinicTime:()=> '12:00',issueTxn:async()=>tag+'-ph-txn-'+(++phPaymentNo),nextPrefixedId:async()=>tag+'-ph-pay-'+phPaymentNo,audit:async()=>{},paymentClient:x=>x,doseClient:x=>x,inventoryClient:x=>x,movementClient:x=>x,visitNeedsPay:realClinical.visitNeedsPay,visitPaid:realClinical.visitPaid,readSignature:()=>null,resolveStaffSignature:staffResolver,auditSavedSignatureUse:staffTools.auditSavedSignatureUse,createDoseInTx:async(tx,enc,input)=>({created:await tx.dose.create({data:{id:enc.id+'-'+input.day,encounterId:enc.id,day:input.day,date:input.date,dose:input.dose,vaccinator:input.vaccinator,branch:'Guimba',signature:input.signature||null,signatureMethod:input.signatureMethod||null,recordedBy:input.recordedBy||null}}),consumed:{line:{}},movement:{}})}
+        const phDeps={SERVICE_PRICES:{'Tetanus Toxoid':300,'ERIG (serum)':2600},z:require('zod').z,clinicalRouter:{post:(p,_g,h)=>{phHandlers[p]=h}},requirePage:()=>()=>{},prisma:db,inScopeEncounter:()=>true,servicingBranch:e=>e.branch,NURSE_ROLE:'Nurse',caseInfo:realClinical.caseInfo,protocolOf:realClinical.protocolOf,isPhilhealthCashFollowUp:phPolicy.isPhilhealthCashFollowUp,boosterServiceForBrand:prepPolicy.boosterServiceForBrand,isBoosterVaccineLine:prepPolicy.isBoosterVaccineLine,ensureFollowupCharge:followupTools.ensureFollowupCharge,clinicDate:()=>today,clinicTime:()=> '12:00',issueTxn:async()=>tag+'-ph-txn-'+(++phPaymentNo),nextPrefixedId:async()=>tag+'-ph-pay-'+(++phRowNo),audit:async()=>{},paymentClient:x=>x,doseClient:x=>x,inventoryClient:x=>x,movementClient:x=>x,visitNeedsPay:realClinical.visitNeedsPay,visitPaid:realClinical.visitPaid,readSignature:()=>null,resolveStaffSignature:staffResolver,auditSavedSignatureUse:staffTools.auditSavedSignatureUse,createDoseInTx:async(tx,enc,input)=>({created:await tx.dose.create({data:{id:enc.id+'-'+input.day,encounterId:enc.id,day:input.day,date:input.date,dose:input.dose,vaccinator:input.vaccinator,branch:'Guimba',signature:input.signature||null,signatureMethod:input.signatureMethod||null,recordedBy:input.recordedBy||null}}),consumed:{line:{}},movement:{}})}
         const phJs=ts.transpileModule(phSource,{compilerOptions:{target:ts.ScriptTarget.ES2020,module:ts.ModuleKind.None}}).outputText
         phDeps.resolveVaccinator=async(db,branch,name)=>db.employee.findFirst({where:{name,branch,role:'Nurse',status:'Active'}})
         new Function(...Object.keys(phDeps),phJs)(...Object.values(phDeps))
@@ -483,6 +483,17 @@ async function main() {
           assert.equal((await phCall('/encounters/:id/followup-payment',{day:'D3',priceCentavos:75000},id)).statusCode,409)
         }
         console.log('Walk-in follow-up payment-first and treatment-first: PASS')
+        const extrasId=tag+'-extras'
+        await tx.encounter.create({data:{id:extrasId,registry:extrasId+'-registry',patientId:tag,branch:'Guimba',date:today,rer:true,billing:'Walk-in',category:'III',pepEligible:true,regimen:'ID',vaccine:'PVRV',brand:'Bioshoot',wound:{},history:{},tt:{},erig:{},progress:{}}})
+        await tx.dose.create({data:{id:extrasId+'-D0',encounterId:extrasId,day:'D0',date:today,dose:'0.1 mL × 2 sites ID',animalStatus:'Alive',vaccinator:'Synthetic Staff',branch:'Guimba'}})
+        const extraResult=await phCall('/encounters/:id/followup-payment',{day:'D3',priceCentavos:75000,extras:[{service:'Tetanus Toxoid',priceCentavos:30000},{service:'ERIG (serum)',priceCentavos:260000}]},extrasId)
+        assert.equal(extraResult.statusCode,200)
+        assert.equal(extraResult.body.payments.length,3)
+        assert.equal(extraResult.body.payments.reduce((sum,p)=>sum+Number(p.amount),0),3650)
+        assert.equal(new Set(extraResult.body.payments.map(p=>p.txn)).size,1)
+        assert.equal((await phCall('/encounters/:id/followup-payment',{day:'D7',priceCentavos:75000,extras:[{service:'Tetanus Toxoid',priceCentavos:30000}]},extrasId)).statusCode,409)
+        console.log('Follow-up extra services, shared transaction and duplicate prevention: PASS')
+
         await tx.payment.create({data:{id:tag+'-legacy-arv',encounterId:phId,registry:tag+'-ph-registry',patient:'Synthetic',branch:'Guimba',date:today,service:'Anti-rabies vaccine',classification:'Walk-in',amount:750,status:'Paid',txn:tag+'-legacy-txn'}})
         assert.equal((await phCall('/encounters/:id/followup-payment',{day:'D14',priceCentavos:75000})).statusCode,409)
         await tx.payment.delete({where:{id:tag+'-legacy-arv'}})

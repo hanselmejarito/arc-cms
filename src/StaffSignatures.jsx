@@ -6,7 +6,8 @@ import SignaturePad from './SignaturePad'
 export function useStaffSignatures() {
   const [rows,setRows]=React.useState([]),[error,setError]=React.useState(''),[loading,setLoading]=React.useState(true)
   React.useEffect(()=>{let live=true;api('/api/staff-signatures').then(r=>{if(live)setRows(r)}).catch(()=>{if(live)setError('Saved signatures are unavailable. You can still sign or upload for this record.')}).finally(()=>{if(live)setLoading(false)});return()=>{live=false}},[])
-  return {rows,error,loading}
+  const refresh=React.useCallback(async()=>{try{const next=await api('/api/staff-signatures');setRows(next);setError('')}catch{setError('Saved signatures are unavailable. You can still sign or upload for this record.')}},[])
+  return {rows,error,loading,refresh}
 }
 
 export function MySignatureProfile({onClose,notify}) {

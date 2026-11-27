@@ -84,7 +84,7 @@ const legacyNight = data.periodInputsFromAttendance(nightEmployee, period.id, [r
 assert.equal(legacyNight.night, 1)
 assert.equal(people.calc(nightEmployee, legacyNight).nightPay, 840 / 7 * 0.1)
 const allocator=load('src/dutyAllocation.js')
-const branchPayroll=load('src/branchPayroll.js',{'./dutyAllocation':allocator,'./data':data})
+const branchPayroll=load('src/branchPayroll.js',{'./dutyAllocation':allocator,'./data':data,'./payrollEligibility':load('src/payrollEligibility.js')})
 const splitAttendance=[row('2026-11-14',{branch:'Paniqui',in:'08:00',out:'17:00',homeBranchAtMorning:'Guimba',roleAtMorning:'Nurse',rateAtMorning:840,officerAtMorning:false,benefitsAtMorning:false,nightBranch:'Guimba',nightIn:'17:00',nightOut:'23:00',homeBranchAtNight:'Guimba',roleAtNight:'Nurse',rateAtNight:840,officerAtNight:false,benefitsAtNight:false})]
 const fullInput={...data.periodInputsFromAttendance(e,period.id,splitAttendance,[],[]),obCount:1}
 const total=people.calc(e,fullInput,{},1,undefined,{payday:period.half})
@@ -98,6 +98,17 @@ assert.ok(Math.abs(allocated.rows.reduce((sum,x)=>sum+x.pay.net,0)-total.net)<0.
 assert.equal(branchPayroll.branchPayrollRows({employee:e,periodId:period.id,attendance:splitAttendance,users:[],overtimeRequests:[],total,calculate:people.calc,hasManualAdjustment:true}).needsReview,true)
 assert.equal(branchPayroll.branchPayrollRows({employee:e,periodId:period.id,attendance:splitAttendance.map(r=>({...r,homeBranchAtMorning:null})),users:[],overtimeRequests:[],total,calculate:people.calc}).needsReview,true)
 assert.equal(branchPayroll.branchPayrollRows({employee:{...e,rate:900},periodId:period.id,attendance:splitAttendance,users:[],overtimeRequests:[],total,calculate:people.calc}).needsReview,true)
+
+const changedBenefits={...e,benefits:true}
+const changedTotal=people.calc(changedBenefits,fullInput,{},1,undefined,{payday:period.half})
+const payrollEligibility=load('src/payrollEligibility.js')
+const currentAllocator=load('src/branchPayroll.js',{'./dutyAllocation':allocator,'./data':{...data,today:'2026-11-14'},'./payrollEligibility':payrollEligibility})
+const currentChanged=currentAllocator.branchPayrollRows({employee:changedBenefits,periodId:period.id,attendance:splitAttendance,users:[],overtimeRequests:[],total:changedTotal,calculate:people.calc})
+assert.equal(currentChanged.needsReview,false)
+assert.ok(Math.abs(currentChanged.rows.reduce((sum,row)=>sum+row.pay.net,0)-changedTotal.net)<0.01)
+const oldAllocator=load('src/branchPayroll.js',{'./dutyAllocation':allocator,'./data':{...data,today:'2026-11-26'},'./payrollEligibility':payrollEligibility})
+assert.equal(oldAllocator.branchPayrollRows({employee:changedBenefits,periodId:period.id,attendance:splitAttendance,users:[],overtimeRequests:[],total:changedTotal,calculate:people.calc}).needsReview,true)
+
 const summaryModule=load('src/branchPayrollSummary.js',{'./dutyAllocation':allocator,'./branchPayroll':branchPayroll,'./data':data,'./payrollEligibility':load('src/payrollEligibility.js')})
 const reportArgs={branches:['Guimba','Paniqui'],employees:[{...e,payroll:true}],attendance:splitAttendance,users:[],payrollInputs:[],contributionOverrides:[],overtimeRequests:[],periodId:period.id,calculate:people.calc}
 const report=summaryModule.branchPayrollSummary(reportArgs)

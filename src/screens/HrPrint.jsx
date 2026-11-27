@@ -1,4 +1,5 @@
 import React from 'react'
+import { clinicName } from '../clinicName'
 import { BrandLogo } from '../components'
 import { addDays, fmt, money, periodInputsFromAttendance } from '../data'
 import { attendanceForBranch } from '../dutyAllocation'
@@ -10,7 +11,7 @@ const datesFor = period => {
   return dates
 }
 function branchGroups(rows){const groups=new Map();for(const row of rows){const group=groups.get(row.branch)||[];group.push(row);groups.set(row.branch,group)}return [...groups.entries()].sort(([a],[b])=>a.localeCompare(b))}
-function Header({branch,period,title}){return <header className="hr-sheet-header"><span className="arc-form-logo"><BrandLogo/></span><div><strong>ARC ANTI-RABIES VACCINE CLINIC</strong><span>{branch} branch</span><b>{title}</b><span>{fmt(period.from)} – {fmt(period.to)}</span></div></header>}
+function Header({branch,period,title}){return <header className="hr-sheet-header"><span className="arc-form-logo"><BrandLogo branch={branch}/></span><div><strong>{clinicName(branch)}</strong><span>{branch} branch</span><b>{title}</b><span>{fmt(period.from)} – {fmt(period.to)}</span></div></header>}
 function Signatories(){return <div className="hr-signatories">{['Prepared by','Checked by','Approved by'].map(label=><div key={label}><span>{label}:</span><i/><small>Signature over printed name</small></div>)}</div>}
 export function AttendancePrint({employees,attendance,users,period,overtimeRequests,temporaryBranchEnabled=false,branchFilter='All branches',branchMaster}){
  const days=datesFor(period),userEmployee=new Map((users||[]).map(u=>[u.id,u.employeeId||u.employee]))

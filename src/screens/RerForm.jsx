@@ -1,15 +1,11 @@
 import React from 'react'
+import { clinicName } from '../clinicName'
+import { referralTreatmentEntries } from '../referralTreatment'
 import { ageFrom, branchMaster, caseInfo } from '../data'
 import { BrandLogo } from '../components'
+import { bodySitePoint } from '../bodySite'
 const bodyMap='/arc-male-body-map.jpg'
 
-const bodyPoints={
- Head:{L:[138,31],R:[114,31]},
- 'Upper extremity':{L:[174,120],R:[78,120]},
- Hand:{L:[183,186],R:[64,186]},
- 'Lower extremity':{L:[144,246],R:[108,246]},
- Foot:{L:[147,318],R:[100,318]}
-}
 const Box=({on})=><i className={'arc-box'+(on?' on':'')} aria-hidden="true">{on&&<svg viewBox="0 0 12 12" focusable="false"><path d="M2 6.2 4.7 8.8 10 3.2"/></svg>}</i>
 const YN=({v})=><span className="arc-yn"><Box on={v===true}/> Y <Box on={v===false}/> N</span>
 const slash=(d,full)=>{if(!d)return '';const [y,m,da]=d.slice(0,10).split('-');return m+' / '+da+' / '+(full?y:y.slice(2))}
@@ -265,14 +261,13 @@ function paperPlace(br){
 export function RerSheet({e,p,doses}){
  const info=caseInfo(e,doses)
  const br=branchMaster.find(b=>b.name===e.branch)||branchMaster[0]
- const h=e.history||{},tt=e.tt||{},er=e.erig||{},pr=e.progress||{}
- const st=info.status,point=bodyPoints[e.site]?.[e.side||'L']
- const brand=(er.brand||'').toLowerCase()
+ const h=e.history||{},pr=e.progress||{},ttEntries=referralTreatmentEntries('tt',e),erigEntries=referralTreatmentEntries('erig',e)
+ const st=info.status,point=bodySitePoint(e.site,e.side,e.bodyView)
  return <div className="rer-sheet arc-form">
   <header className="arc-form-head">
-   <span className="arc-form-logo"><BrandLogo alt="ARC Anti Rabies Clinic"/></span>
+   <span className="arc-form-logo"><BrandLogo branch={e.branch}/></span>
    <div className="arc-form-title">
-    <h1>ARC ANIMAL BITE CENTER</h1>
+    <h1>{clinicName(e.branch,'ARC ANIMAL BITE CENTER')}</h1>
     <p>{paperPlace(br)}</p>
     <small>Mobile No: {(br.contact||'09469451531').replace(/\s/g,'')} / EMAIL ADDRESS arcantirabisclinic@gmail.com</small>
    </div>
@@ -312,7 +307,7 @@ export function RerSheet({e,p,doses}){
       {point&&<g className="body-marker"><circle cx={point[0]} cy={point[1]} r="16"/><circle cx={point[0]} cy={point[1]} r="6"/></g>}
      </svg>
     </div>
-    {e.chief&&<p className="arc-chief">{e.chief}{e.site?' · '+(e.side||'')+' '+e.site:''}</p>}
+    {(e.chief||e.site)&&<p className="arc-chief">{[e.chief,[e.side,e.site,e.bodyView].filter(Boolean).join(' ')].filter(Boolean).join(' · ')}</p>}
    </div>
    <div className="arc-right">
     <div className="arc-row"><b>Bitting Animal:</b> <Box on={e.animal==='Dog'}/> Dog <Box on={e.animal==='Cat'}/> Cat <Box on={e.animal==='Others'}/> Oth: <u className="arc-animal-other">{e.animal==='Others'?e.animalOther:''}</u></div>
@@ -355,20 +350,24 @@ export function RerSheet({e,p,doses}){
     </div>
     <div className="arc-panel">
      <h3>TETANUS TOXOID:</h3>
-     <div className="arc-indent">
+     {ttEntries.map((entry,i)=>{const tt=entry.value;return <div className="arc-indent" key={i}>
+      {entry.branch&&e.referralProgress&&<p>Branch: <b>{entry.branch}</b></p>}
       <p>Date: <u>{slash(tt.date)}</u> Time: <u>{tt.time||''}</u></p>
       <p>Refused: <Box on={!!tt.refused}/> With Previous <Box on={!!tt.withPrevious}/></p>
-     </div>
+     </div>})}
     </div>
     <div className="arc-panel">
-     <h3>ERIG: <span className="arc-erig-options"><Box on={brand.includes('equirab')}/> EQUIRAB <Box on={brand.includes('vinrab')}/> VINRAB{brand.includes('hrig')&&<u> HRIG</u>}</span></h3>
-     <div className="arc-indent">
-      <p>Date: <u>{slash(er.date)}</u></p>
-      <p>Time of Skin Test: <u>{er.skinTime||''}</u></p>
-      <p>Result of ST: <u>{er.skinResult||''}</u> Weight: <u>{er.weight||''}</u></p>
-      <p>Infiltration: <YN v={er.infiltration}/> ML used: <u>{er.ml||''}</u> ml</p>
-      <p>Refused: <Box on={!!er.refused}/></p>
-     </div>
+     {erigEntries.map((entry,i)=>{const er=entry.value,brand=(er.brand||'').toLowerCase();return <div key={i}>
+      <h3>ERIG: <span className="arc-erig-options"><Box on={brand.includes('equirab')}/> EQUIRAB <Box on={brand.includes('vinrab')}/> VINRAB{brand.includes('hrig')&&<u> HRIG</u>}</span></h3>
+      <div className="arc-indent">
+       {entry.branch&&e.referralProgress&&<p>Branch: <b>{entry.branch}</b></p>}
+       <p>Date: <u>{slash(er.date)}</u></p>
+       <p>Time of Skin Test: <u>{er.skinTime||''}</u></p>
+       <p>Result of ST: <u>{er.skinResult||''}</u> Weight: <u>{er.weight||''}</u></p>
+       <p>Infiltration: <YN v={er.infiltration}/> ML used: <u>{er.ml||''}</u> ml</p>
+       <p>Refused: <Box on={!!er.refused}/></p>
+      </div>
+     </div>})}
     </div>
     <div className="arc-panel">
      <h3>PROGRESS NOTE:</h3>
